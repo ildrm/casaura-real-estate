@@ -1,0 +1,272 @@
+openapi: 3.1.0
+info:
+  title: Casaura API
+  version: 1.0.0-phase1
+  description: Versioned Phase 1 contract for identity, agencies, tenancy, and entitlements.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development
+tags:
+  - name: System
+  - name: Authentication
+  - name: Agencies
+paths:
+  /health:
+    get:
+      tags: [System]
+      operationId: health
+      responses:
+        "200":
+          description: API is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service, version]
+                properties:
+                  status: { type: string, const: ok }
+                  service: { type: string, const: casaura-api }
+                  version: { type: string }
+  /auth/register:
+    post:
+      tags: [Authentication]
+      operationId: registerConsumer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrincipalResponse"
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/register-agency:
+    post:
+      tags: [Authentication, Agencies]
+      operationId: registerAgency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/RegisterRequest"
+                - type: object
+                  required: [agency_name]
+                  properties:
+                    agency_name: { type: string, minLength: 2, maxLength: 160 }
+                    timezone: { type: string, default: UTC }
+      responses:
+        "201":
+          description: Agency and owner account created atomically
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrincipalResponse"
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrincipalResponse"
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/logout:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: logout
+      responses:
+        "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /me:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: me
+      responses:
+        "200":
+          description: Current principal and memberships
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrincipalResponse"
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /agencies/{agency}:
+    get:
+      tags: [Agencies]
+      operationId: publicAgency
+      parameters:
+        - in: path
+          name: agency
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Public safe agency projection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Agency" }
+        "404": { description: Not found }
+  /agency:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agencies]
+      operationId: currentAgency
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Current tenant workspace projection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Agency" }
+        "403": { $ref: "#/components/responses/TenantDenied" }
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Agencies]
+      operationId: updateCurrentAgency
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 2, maxLength: 160 }
+                short_description: { type: [string, "null"], maxLength: 320 }
+                phone: { type: [string, "null"], maxLength: 40 }
+                website: { type: [string, "null"], format: uri }
+      responses:
+        "200":
+          description: Updated
+        "403": { $ref: "#/components/responses/TenantDenied" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /agency/members:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agencies]
+      operationId: agencyMembers
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Tenant-scoped members
+        "403": { $ref: "#/components/responses/TenantDenied" }
+components:
+  securitySchemes:
+    sanctum:
+      type: apiKey
+      in: cookie
+      name: laravel_session
+  parameters:
+    AgencyId:
+      in: header
+      name: Agency-ID
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password, password_confirmation]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, format: password, minLength: 12 }
+        password_confirmation: { type: string, format: password }
+    Agency:
+      type: object
+      required: [id, name, slug, verification_status, status, timezone]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        short_description: { type: [string, "null"] }
+        verification_status:
+          type: string
+          enum: [unverified, pending, verified, rejected, suspended]
+        status:
+          type: string
+          enum: [active, suspended, archived]
+        timezone: { type: string }
+    Membership:
+      type: object
+      required: [id, agency, status, roles, permissions]
+      properties:
+        id: { type: string, format: uuid }
+        agency: { $ref: "#/components/schemas/Agency" }
+        status: { type: string, enum: [invited, active, suspended] }
+        roles: { type: array, items: { type: string } }
+        permissions: { type: array, items: { type: string } }
+    PrincipalResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, name, email, memberships]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            email: { type: string, format: email }
+            memberships:
+              type: array
+              items: { $ref: "#/components/schemas/Membership" }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: true }
+            request_id: { type: string }
+  responses:
+    Unauthenticated:
+      description: Authentication required
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TenantDenied:
+      description: Active user is not a member of the selected agency
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
