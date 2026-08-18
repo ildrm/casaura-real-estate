@@ -4,6 +4,8 @@ export type ApiError = {
   code: string;
   message: string;
   fields?: Record<string, string[]>;
+  current_version?: number;
+  checklist?: Array<{ key: string; complete: boolean; message: string }>;
 };
 
 function cookieValue(name: string): string | undefined {
@@ -19,8 +21,8 @@ function cookieValue(name: string): string | undefined {
 
 export async function apiMutation<T>(
   path: string,
-  body: Record<string, unknown>,
-  options: { method?: "POST" | "PATCH"; agencyId?: string } = {},
+  body: Record<string, unknown> | FormData,
+  options: { method?: "POST" | "PUT" | "PATCH" | "DELETE"; agencyId?: string; idempotencyKey?: string } = {},
 ): Promise<T> {
   const csrfResponse = await fetch(`${API_URL}/sanctum/csrf-cookie`, {
     credentials: "include",
@@ -37,11 +39,12 @@ export async function apiMutation<T>(
     credentials: "include",
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...(options.agencyId ? { "Agency-ID": options.agencyId } : {}),
+      ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
       ...(xsrf ? { "X-XSRF-TOKEN": decodeURIComponent(xsrf) } : {}),
     },
-    body: JSON.stringify(body),
+    body: body instanceof FormData ? body : JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -53,4 +56,49 @@ export async function apiMutation<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export async function apiQuery<T>(path: string, agencyId?: string): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      ...(agencyId ? { "Agency-ID": agencyId } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: ApiError } | null;
+    throw payload?.error ?? {
+      code: "REQUEST_FAILED",
+      message: "The request could not be completed. Please try again.",
+    } satisfies ApiError;
+  }
+
+  return (await response.json()) as T;
+}
+
+export function activeAgencyId(): string | null {
+  if (typeof window === "undefined") return null;
+
+  return window.localStorage.getItem("casaura.activeAgencyId");
+}
+
+export async function publicApiQuery<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: ApiError } | null;
+    throw payload?.error ?? { code: "REQUEST_FAILED", message: "Property data is temporarily unavailable." } satisfies ApiError;
+  }
+
+  return (await response.json()) as T;
+}
+
+export function publicAssetUrl(path?: string | null): string | null {
+  if (!path) return null;
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_URL}${path}`;
 }

@@ -2,10 +2,13 @@
 
 namespace Database\Seeders;
 
+use App\Models\Amenity;
 use App\Models\FeatureFlag;
 use App\Models\Permission;
 use App\Models\Plan;
 use App\Models\PlanEntitlement;
+use App\Models\PropertyFeatureDefinition;
+use App\Models\PropertyType;
 use App\Models\Role;
 use App\Models\Setting;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -26,6 +29,12 @@ class DatabaseSeeder extends Seeder
             'property.create' => 'property',
             'property.publish' => 'property',
             'property.delete' => 'property',
+            'listing.view' => 'listing',
+            'listing.create' => 'listing',
+            'listing.update' => 'listing',
+            'listing.publish' => 'listing',
+            'listing.delete' => 'listing',
+            'media.manage' => 'listing',
             'lead.manage' => 'lead',
             'analytics.view' => 'analytics',
             'billing.manage' => 'billing',
@@ -49,10 +58,17 @@ class DatabaseSeeder extends Seeder
             'agency_manager' => [
                 'agency.manage_profile', 'agency.manage_members', 'property.create',
                 'property.publish', 'property.delete', 'lead.manage', 'analytics.view',
-                'integration.configure', 'audit.view',
+                'integration.configure', 'audit.view', 'listing.view', 'listing.create',
+                'listing.update', 'listing.publish', 'listing.delete', 'media.manage',
             ],
-            'agent' => ['property.create', 'property.publish', 'lead.manage', 'analytics.view'],
-            'content_manager' => ['agency.manage_profile', 'property.create'],
+            'agent' => [
+                'property.create', 'property.publish', 'lead.manage', 'analytics.view',
+                'listing.view', 'listing.create', 'listing.update', 'media.manage',
+            ],
+            'content_manager' => [
+                'agency.manage_profile', 'property.create', 'listing.view',
+                'listing.create', 'listing.update', 'media.manage',
+            ],
             'agency_analyst' => ['analytics.view'],
             'moderator' => ['comment.moderate', 'audit.view'],
             'support_administrator' => ['audit.view'],
@@ -85,12 +101,63 @@ class DatabaseSeeder extends Seeder
             'agency_storefronts' => true,
             'team_management' => true,
             'listing_creation' => true,
+            'media_storage_mb' => true,
             'messaging' => true,
             'viewings' => true,
         ] as $key => $value) {
             PlanEntitlement::query()->updateOrCreate(
                 ['plan_id' => $plan->id, 'key' => $key],
-                ['value' => $value, 'quota' => $key === 'team_management' ? 50 : null],
+                ['value' => $value, 'quota' => match ($key) {
+                    'team_management' => 50,
+                    'listing_creation' => 500,
+                    'media_storage_mb' => 5120,
+                    default => null,
+                }],
+            );
+        }
+
+        foreach ([
+            'house' => ['House', 'residential'],
+            'apartment' => ['Apartment', 'residential'],
+            'townhouse' => ['Townhouse', 'residential'],
+            'land' => ['Land', 'land'],
+            'commercial' => ['Commercial', 'commercial'],
+        ] as $slug => [$name, $category]) {
+            PropertyType::query()->updateOrCreate(
+                ['slug' => $slug],
+                ['name' => $name, 'category' => $category, 'is_active' => true],
+            );
+        }
+
+        foreach ([
+            'garden' => ['Garden', 'outdoor'],
+            'garage' => ['Garage', 'parking'],
+            'pool' => ['Pool', 'leisure'],
+            'balcony' => ['Balcony', 'outdoor'],
+            'elevator' => ['Elevator', 'access'],
+            'air_conditioning' => ['Air conditioning', 'comfort'],
+        ] as $slug => [$name, $group]) {
+            Amenity::query()->updateOrCreate(
+                ['slug' => $slug],
+                ['name' => $name, 'group' => $group, 'is_active' => true],
+            );
+        }
+
+        foreach ([
+            'year_built' => ['Year built', 'integer', 'year', ['min' => 1700, 'max' => 2100]],
+            'parking_spaces' => ['Parking spaces', 'integer', 'spaces', ['min' => 0, 'max' => 100]],
+            'energy_rating' => ['Energy rating', 'enum', null, ['values' => ['A', 'B', 'C', 'D', 'E', 'F', 'G']]],
+            'furnished' => ['Furnished', 'boolean', null, null],
+        ] as $slug => [$name, $valueType, $unit, $validation]) {
+            PropertyFeatureDefinition::query()->updateOrCreate(
+                ['slug' => $slug],
+                [
+                    'name' => $name,
+                    'value_type' => $valueType,
+                    'unit' => $unit,
+                    'validation' => $validation,
+                    'is_active' => true,
+                ],
             );
         }
 

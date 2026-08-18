@@ -25,6 +25,16 @@ class User extends Authenticatable
         return $this->hasMany(AgencyMember::class);
     }
 
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
+    public function propertyReactions(): HasMany
+    {
+        return $this->hasMany(PropertyReaction::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

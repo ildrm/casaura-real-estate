@@ -27,7 +27,7 @@ export default async function AgencyDashboardPage() {
           <section className="workspace-title">
             <div><h1>Good morning, Maya</h1><p>Here’s what needs your attention today.</p></div>
             <div className="workspace-title__actions">
-              <span className="button button--disabled" aria-disabled="true" title="The listing wizard is delivered in Phase 2"><Icon name="plus" /> Add property</span>
+              <Link className="button button--primary" href="/agency/properties/new"><Icon name="plus" /> Add property</Link>
               <Link className="button button--outline" href="/#agencies">View storefront</Link>
             </div>
           </section>

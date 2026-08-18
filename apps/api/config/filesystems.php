@@ -47,6 +47,15 @@ return [
             'report' => false,
         ],
 
+        'listing_media' => [
+            'driver' => env('LISTING_MEDIA_DISK', 'local'),
+            'root' => storage_path('app/listings'),
+            'visibility' => 'private',
+            'serve' => false,
+            'throw' => true,
+            'report' => true,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

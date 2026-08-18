@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Listings\ListingException;
+use App\Domain\Search\SearchException;
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\EnsurePermission;
 use App\Http\Middleware\ResolveAgencyTenant;
@@ -59,6 +61,36 @@ return Application::configure(basePath: dirname(__DIR__))
                     'request_id' => $request->attributes->get('request_id'),
                 ],
             ], 401);
+        });
+
+        $exceptions->render(function (ListingException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => array_merge([
+                    'code' => $exception->errorCode,
+                    'message' => $exception->getMessage(),
+                    'fields' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ], $exception->context),
+            ], $exception->status);
+        });
+
+        $exceptions->render(function (SearchException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode,
+                    'message' => $exception->getMessage(),
+                    'fields' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->status);
         });
 
         $exceptions->render(function (HttpExceptionInterface $exception, Request $request) {

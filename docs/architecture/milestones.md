@@ -22,16 +22,16 @@ Each phase ships as vertical slices with persistence, policy, API, UI, loading/e
 
 ## Phase 2 — Listing core
 
-- [ ] Property/listing split, taxonomy, features, amenities, history
-- [ ] Guided listing wizard and autosaved drafts
-- [ ] Secure media pipeline, storage ports, derivatives, quota enforcement
-- [ ] Publication workflow, moderation, quality score
+- [x] Property/listing split, taxonomy, features, amenities, history
+- [x] Guided listing wizard and autosaved drafts
+- [x] Secure media pipeline, storage ports, derivatives, quota enforcement
+- [x] Publication workflow, moderation, quality score
 
 ## Phase 3 — Consumer marketplace
 
-- [ ] OpenSearch projection and global/filter/map search
-- [ ] Property detail, favorites, reactions, account dashboard
-- [ ] PostGIS bounding, radius, polygon, and approximate-location behavior
+- [x] OpenSearch projection and global/filter/map search
+- [x] Property detail, favorites, reactions, account dashboard
+- [x] PostGIS bounding, radius, polygon, and approximate-location behavior
 
 ## Phase 4 — Leads and collaboration
 
@@ -80,3 +80,22 @@ Each phase ships as vertical slices with persistence, policy, API, UI, loading/e
 - API: Laravel Pint and Composer validation passed.
 - Dependencies: npm and Composer advisory audits reported no known vulnerabilities.
 - Visual: desktop and mobile captures were compared with both accepted concepts; see the [fidelity ledger](../design/fidelity-ledger.md).
+
+## Latest Phase 2 verification — 2026-08-18
+
+- Specification: 19 functional requirements, 11 non-functional requirements, 17 acceptance criteria, and 10 edge cases validated at 100/100 by the strict specification validator.
+- Laravel: 15 tests passed with 129 assertions, including tenant-negative listing/media cases, optimistic concurrency, immutable history, workflow guards, private derivatives, idempotency, quota, reorder, and deletion behavior.
+- Playwright Chromium: all 6 journeys passed across desktop Chrome and Pixel-sized mobile projects; the listing journey creates, autosaves, reloads, and resumes a real tenant-owned draft.
+- Web: ESLint, TypeScript, and the Next.js production build passed with inventory, new-listing, and dynamic editor routes.
+- API: Laravel Pint and the complete test suite passed after formatting.
+- Visual: stable desktop and 390×844 mobile captures were inspected beside both approved Phase 2 concepts; see the [fidelity ledger](../design/fidelity-ledger.md).
+
+## Latest Phase 3 verification — 2026-08-18
+
+- Specification: 18 functional requirements, 12 non-functional requirements, 15 acceptance criteria, and 10 edge cases validated at 100/100 by the strict specification validator.
+- Laravel: 23 tests passed with 267 assertions, including unpublished exclusion, public-field allowlisting, approximate-location displacement, bounds/radius filters, projection rebuild, private engagement, and public derivative delivery.
+- Playwright Chromium: all 8 journeys passed across desktop Chrome and Pixel-sized mobile projects; the marketplace journey publishes real inventory, searches it, switches list/map views, opens the detail route, persists a favorite, and verifies the account dashboard.
+- Web: ESLint, TypeScript, and the Next.js production build passed with search, dynamic property detail, and account routes.
+- API: Laravel Pint and the complete test suite passed after formatting; the OpenAPI YAML parses successfully.
+- Visual: desktop and 390-pixel mobile search/detail captures were inspected beside both approved Phase 3 concepts; the mobile detail reading order was corrected during acceptance. See the [fidelity ledger](../design/fidelity-ledger.md).
+- Integration note: the database search backend and SQLite spatial-equivalence path are exercised locally. The OpenSearch adapter and PostGIS expressions are implemented behind ports for the configured production services; live-provider validation remains part of deployment integration.

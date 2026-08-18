@@ -42,6 +42,11 @@ class Agency extends Model
         return $this->hasOne(Subscription::class);
     }
 
+    public function listings(): HasMany
+    {
+        return $this->hasMany(Listing::class);
+    }
+
     protected function casts(): array
     {
         return [

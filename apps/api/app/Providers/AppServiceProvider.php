@@ -2,6 +2,11 @@
 
 namespace App\Providers;
 
+use App\Domain\Media\LaravelMediaStorage;
+use App\Domain\Media\MediaStorage;
+use App\Domain\Search\DatabaseSearchBackend;
+use App\Domain\Search\OpenSearchBackend;
+use App\Domain\Search\SearchBackend;
 use App\Domain\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -16,6 +21,10 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(TenantContext::class);
+        $this->app->bind(MediaStorage::class, LaravelMediaStorage::class);
+        $this->app->bind(SearchBackend::class, fn ($app) => config('search.driver') === 'opensearch'
+            ? $app->make(OpenSearchBackend::class)
+            : $app->make(DatabaseSearchBackend::class));
     }
 
     /**
@@ -26,6 +35,18 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('auth', fn (Request $request) => [
             Limit::perMinute(10)->by($request->ip()),
             Limit::perMinute(5)->by(mb_strtolower((string) $request->input('email'))),
+        ]);
+
+        RateLimiter::for('media', fn (Request $request) => [
+            Limit::perMinute(30)->by(($request->user()?->id ?? 'guest').'|'.$request->ip()),
+        ]);
+
+        RateLimiter::for('search', fn (Request $request) => [
+            Limit::perMinute(120)->by($request->ip()),
+        ]);
+
+        RateLimiter::for('engagement', fn (Request $request) => [
+            Limit::perMinute(90)->by(($request->user()?->id ?? 'guest').'|'.$request->ip()),
         ]);
     }
 }

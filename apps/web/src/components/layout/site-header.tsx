@@ -5,9 +5,8 @@ import { Icon } from "@/components/ui/icon";
 const navigation = [
   { label: "Buy", href: "/search?intent=buy" },
   { label: "Rent", href: "/search?intent=rent" },
-  { label: "New homes", href: "/search?intent=new" },
+  { label: "Explore", href: "/search" },
   { label: "Agencies", href: "/#agencies" },
-  { label: "Insights", href: "/#market-insights" },
 ];
 
 export function SiteHeader() {
@@ -23,12 +22,13 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="site-header__actions">
+          <Link className="header-saved" href="/account"><Icon name="heart" /><span>Saved</span></Link>
           <Link className="button button--outline header-list-property" href="/register/agency">
             List a property
           </Link>
-          <Link className="sign-in-link" href="/sign-in">
+          <Link className="sign-in-link" href="/account">
             <Icon name="user" />
-            <span>Sign in</span>
+            <span>My account</span>
           </Link>
           <details className="mobile-menu">
             <summary aria-label="Open navigation menu">
@@ -40,6 +40,7 @@ export function SiteHeader() {
                   {item.label}
                 </Link>
               ))}
+              <Link href="/account">Saved properties</Link>
               <Link href="/register/agency">List a property</Link>
             </nav>
           </details>

@@ -1,4 +1,4 @@
-# Domain model and initial database design
+# Domain model and database design
 
 ## Core ER diagram
 
@@ -19,6 +19,12 @@ erDiagram
   LISTINGS ||--o{ LISTING_STATUS_HISTORY : transitions
   LISTINGS ||--o{ PRICE_HISTORY : changes
   LISTINGS ||--o{ MEDIA : presents
+  LISTINGS ||--|| SEARCH_DOCUMENTS : projects
+  LISTINGS ||--o{ SEARCH_PROJECTION_OUTBOX : queues
+  USERS ||--o{ FAVORITES : saves
+  LISTINGS ||--o{ FAVORITES : receives
+  USERS ||--o{ PROPERTY_REACTIONS : reacts
+  LISTINGS ||--o{ PROPERTY_REACTIONS : receives
   LISTINGS ||--o{ DATA_SOURCE_RECORDS : sourced_from
   AGENCIES ||--o{ LEADS : receives
   LISTINGS ||--o{ LEADS : generates
@@ -51,14 +57,45 @@ erDiagram
 | `audit_logs` | append-only UUID PK; actor, agency, action, entity, before/after JSON, IP, request ID, timestamp |
 | `personal_access_tokens` | Sanctum token hashes and abilities; never store plaintext tokens |
 
-## Planned catalogue and marketplace tables
+## Phase 2 physical tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `property_types` | UUID PK; globally unique stable slug; category and active state |
+| `amenities` | UUID PK; globally unique stable slug; presentation group and active state |
+| `property_feature_definitions` | UUID PK; unique slug; typed value contract, unit, and JSON validation rules |
+| `addresses` | UUID PK; required agency ownership; normalized address and private coordinate fields; tenant/locality index |
+| `properties` | UUID PK; agency, property type, optional address; canonical bedrooms, bathrooms, metric area; recoverable soft delete |
+| `property_identifiers` | UUID PK; property, scheme, value, source; unique property/scheme/value identity |
+| `listings` | UUID PK; agency/property/creator; unique agency reference; intent, workflow state, copy, minor-unit price, optimistic version, quality score, transition timestamps; tenant workflow index; soft delete |
+| `property_feature_values` | One JSON value per property/feature definition; application layer enforces the definition’s declared type |
+| `property_amenities` | Composite property/amenity PK for deterministic synchronization |
+| `listing_versions` | Immutable unique `(listing_id, version)` JSON snapshots with actor and timestamp |
+| `listing_status_history` | Append-only from/to state, actor, review note, and timestamp |
+| `price_history` | Append-only minor-unit amount, ISO currency, actor, and effective timestamp |
+| `media` | Agency/listing ownership; unique listing idempotency key; sniffed MIME, decoded dimensions, checksum, private object key, position, alt text; soft delete |
+| `media_derivatives` | Unique media/kind private WebP derivative metadata; storage keys never leave private API serializers |
+
+## Phase 3 physical tables and extensions
+
+| Table or extension | Important fields and constraints |
+| --- | --- |
+| `listings.slug` | Stable public slug paired with the opaque listing UUID in canonical property URLs |
+| `addresses` public-location fields | Explicit `public_location_policy` plus nullable public coordinates; exact private coordinates remain tenant-only |
+| `search_documents` | One public-safe document per published listing; denormalized text, facts, features, amenities, agency state, media metadata, public location, projection version, and listed timestamp |
+| `search_projection_outbox` | Idempotent per-listing operation/version queue with attempts, processed/failure timestamps, and last error for rebuildable search delivery |
+| `favorites` | Unique `(user_id, listing_id)` private account relationship with cascading ownership constraints |
+| `property_reactions` | Unique `(user_id, listing_id)` private `like`/`dislike` state; replacement does not create duplicate reactions |
+| PostgreSQL spatial extensions | PostGIS geography points and GiST indexes for public and private locations; SQLite stores equivalent scalar coordinates for deterministic local tests |
+
+## Planned marketplace tables
 
 The following are designed now and delivered by vertical slice, not as empty speculative migrations:
 
-- Catalogue: `properties`, `property_identifiers`, `addresses`, `listings`, `listing_sources`, `listing_versions`, `listing_status_history`, `price_history`, `property_types`, `property_feature_definitions`, `property_feature_values`, `amenities`, `property_amenities`, `rooms`, `developments`, `buildings`, `units`.
+- Catalogue extensions: `listing_sources`, `rooms`, `developments`, `buildings`, `units`.
 - Geography: `locations`, `geographic_boundaries`, parcel/cadastral provider references.
-- Media: `media`, `media_derivatives`, `floor_plans`, `property_documents`, `upload_sessions`, `storage_migrations`.
-- Discovery/engagement: `favorites`, `reactions`, `collections`, `collection_members`, `collection_properties`, `property_comments`, `property_ratings`, `saved_searches`, `search_alerts`, `search_demand_events`.
+- Media extensions: `floor_plans`, `property_documents`, `upload_sessions`, `storage_migrations`.
+- Discovery/engagement: `collections`, `collection_members`, `collection_properties`, `property_comments`, `property_ratings`, `saved_searches`, `search_alerts`, `search_demand_events`.
 - CRM/collaboration: `leads`, `lead_status_history`, `viewing_requests`, `open_houses`, `conversations`, `conversation_participants`, `messages`, `notifications`.
 - Agency growth: `agency_opening_hours`, `agency_verifications`, `agents`, `newsletter_subscribers`, `newsletter_campaigns`, `newsletter_events`, `analytics_events`.
 - Integrations: `real_estate_data_providers`, `provider_connections`, `data_source_records`, `field_mappings`, `sync_jobs`, `import_errors`, `duplicate_candidates`.

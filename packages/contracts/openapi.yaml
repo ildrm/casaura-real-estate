@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Casaura API
-  version: 1.0.0-phase1
-  description: Versioned Phase 1 contract for identity, agencies, tenancy, and entitlements.
+  version: 1.2.0-phase3
+  description: Versioned contract through Phase 3 for identity, agencies, tenancy, listings, private media, public marketplace search, spatial privacy, and consumer engagement.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local development
@@ -10,6 +10,10 @@ tags:
   - name: System
   - name: Authentication
   - name: Agencies
+  - name: Listings
+  - name: Media
+  - name: Marketplace
+  - name: Engagement
 paths:
   /health:
     get:
@@ -183,6 +187,437 @@ paths:
         "200":
           description: Tenant-scoped members
         "403": { $ref: "#/components/responses/TenantDenied" }
+  /property-catalog:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: propertyCatalog
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Stable active property types, amenities, and typed feature definitions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropertyCatalogResponse" }
+        "403": { $ref: "#/components/responses/TenantDenied" }
+  /listings:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: listListings
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, changes_requested, in_review, published, withdrawn, needs_attention]
+        - in: query
+          name: q
+          schema: { type: string, maxLength: 120 }
+        - in: query
+          name: property_type
+          schema: { type: string, maxLength: 80 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: Cursor-paginated tenant inventory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingPage" }
+        "403": { $ref: "#/components/responses/TenantDenied" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: createListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingCreateRequest" }
+      responses:
+        "201":
+          description: Property/listing draft and initial immutable history created atomically
+          headers:
+            ETag: { schema: { type: string }, description: Quoted listing version }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "403": { $ref: "#/components/responses/TenantDenied" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /listings/{listing}:
+    parameters:
+      - $ref: "#/components/parameters/ListingId"
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: getListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "200":
+          description: Tenant-owned listing projection
+          headers:
+            ETag: { schema: { type: string }, description: Quoted listing version }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: updateListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ListingUpdateRequest" }
+      responses:
+        "200":
+          description: Optimistic autosave completed and immutable version appended
+          headers:
+            ETag: { schema: { type: string }, description: Quoted listing version }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: deleteListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+      responses:
+        "204": { description: Eligible draft soft-deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+  /listings/{listing}/submit:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: submitListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: Complete draft submitted for review
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /listings/{listing}/publish:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: publishListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: In-review listing published
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+  /listings/{listing}/request-changes:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: requestListingChanges
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string, minLength: 3, maxLength: 2000 }
+      responses:
+        "200":
+          description: Listing returned with reviewer note
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /listings/{listing}/withdraw:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Listings]
+      operationId: withdrawListing
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: Published listing withdrawn
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListingResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+  /listings/{listing}/media:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Media]
+      operationId: listListingMedia
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: Safe metadata for active owned media
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Media" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Media]
+      operationId: uploadListingMedia
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                alt_text: { type: [string, "null"], maxLength: 300 }
+      responses:
+        "200":
+          description: Completed idempotent upload replayed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaResponse" }
+        "201":
+          description: Private original and WebP derivatives created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /listings/{listing}/media/order:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Media]
+      operationId: reorderListingMedia
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_ids]
+              properties:
+                media_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 30
+                  uniqueItems: true
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Complete owned-media order persisted
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /listings/{listing}/media/{media}:
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Media]
+      operationId: deleteListingMedia
+      parameters:
+        - $ref: "#/components/parameters/AgencyId"
+        - $ref: "#/components/parameters/ListingId"
+        - $ref: "#/components/parameters/MediaId"
+      responses:
+        "204": { description: Media soft-deleted and private objects quarantined }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /public/search:
+    get:
+      tags: [Marketplace]
+      operationId: publicSearch
+      parameters:
+        - { in: query, name: q, schema: { type: string, maxLength: 160 } }
+        - { in: query, name: intent, schema: { type: string, enum: [sale, rent] } }
+        - { in: query, name: min_price, schema: { type: integer, minimum: 0 } }
+        - { in: query, name: max_price, schema: { type: integer, minimum: 0 } }
+        - { in: query, name: currency, schema: { type: string, minLength: 3, maxLength: 3 } }
+        - { in: query, name: property_type, schema: { type: string, maxLength: 80 } }
+        - { in: query, name: min_bedrooms, schema: { type: integer, minimum: 0, maximum: 100 } }
+        - { in: query, name: min_bathrooms, schema: { type: number, minimum: 0, maximum: 100 } }
+        - { in: query, name: min_area_sqm, schema: { type: number, minimum: 0 } }
+        - { in: query, name: max_area_sqm, schema: { type: number, minimum: 0 } }
+        - in: query
+          name: amenities
+          description: Comma-separated stable amenity slugs.
+          schema: { type: string, maxLength: 500 }
+        - { in: query, name: verified_agency, schema: { type: boolean } }
+        - in: query
+          name: bounds
+          description: Comma-separated min longitude, min latitude, max longitude, max latitude.
+          schema: { type: string, maxLength: 160 }
+        - in: query
+          name: radius
+          description: Comma-separated latitude, longitude, and radius in kilometres.
+          schema: { type: string, maxLength: 160 }
+        - { in: query, name: sort, schema: { type: string, enum: [newest, price_asc, price_desc], default: newest } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { in: query, name: cursor, schema: { type: string, maxLength: 2000 } }
+      responses:
+        "200":
+          description: Public-safe, cursor-paginated published listing cards.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicSearchResponse" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /public/listings/{listing}:
+    get:
+      tags: [Marketplace]
+      operationId: publicListing
+      parameters:
+        - $ref: "#/components/parameters/ListingId"
+      responses:
+        "200":
+          description: Published public listing detail using only allowlisted projection fields.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/PublicListingDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /public/media/{media}/{kind}:
+    get:
+      tags: [Marketplace, Media]
+      operationId: publicListingMedia
+      parameters:
+        - $ref: "#/components/parameters/MediaId"
+        - in: path
+          name: kind
+          required: true
+          schema: { type: string, enum: [thumbnail, display] }
+      responses:
+        "200":
+          description: WebP derivative belonging to an active published listing.
+          content:
+            image/webp:
+              schema: { type: string, format: binary }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /account/engagements:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Engagement]
+      operationId: accountEngagements
+      responses:
+        "200":
+          description: Current user's private favorite and reaction collections.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EngagementCollectionsResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /account/favorites/{listing}:
+    parameters:
+      - $ref: "#/components/parameters/ListingId"
+    put:
+      security: [{ sanctum: [] }]
+      tags: [Engagement]
+      operationId: favoriteListing
+      responses:
+        "200":
+          description: Published listing is favorited idempotently.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FavoriteMutationResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Engagement]
+      operationId: unfavoriteListing
+      responses:
+        "200":
+          description: Favorite is absent after an idempotent delete.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FavoriteMutationResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /account/reactions/{listing}:
+    parameters:
+      - $ref: "#/components/parameters/ListingId"
+    put:
+      security: [{ sanctum: [] }]
+      tags: [Engagement]
+      operationId: reactToListing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reaction]
+              properties:
+                reaction: { type: string, enum: [like, dislike] }
+      responses:
+        "200":
+          description: Private reaction is set or replaced.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReactionMutationResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Engagement]
+      operationId: removeListingReaction
+      responses:
+        "200":
+          description: Private reaction is absent after delete.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReactionMutationResponse" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
 components:
   securitySchemes:
     sanctum:
@@ -195,6 +630,21 @@ components:
       name: Agency-ID
       required: true
       schema: { type: string, format: uuid }
+    ListingId:
+      in: path
+      name: listing
+      required: true
+      schema: { type: string, format: uuid }
+    MediaId:
+      in: path
+      name: media
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 160 }
   schemas:
     RegisterRequest:
       type: object
@@ -242,6 +692,368 @@ components:
             memberships:
               type: array
               items: { $ref: "#/components/schemas/Membership" }
+    PropertyCatalogResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [property_types, amenities, feature_definitions]
+          properties:
+            property_types:
+              type: array
+              items:
+                type: object
+                required: [slug, name, category]
+                properties:
+                  slug: { type: string }
+                  name: { type: string }
+                  category: { type: string }
+            amenities:
+              type: array
+              items:
+                type: object
+                required: [slug, name, group]
+                properties:
+                  slug: { type: string }
+                  name: { type: string }
+                  group: { type: string }
+            feature_definitions:
+              type: array
+              items:
+                type: object
+                required: [slug, name, value_type]
+                properties:
+                  slug: { type: string }
+                  name: { type: string }
+                  value_type: { type: string, enum: [boolean, integer, decimal, string, enum] }
+                  unit: { type: [string, "null"] }
+                  validation: { type: [object, "null"], additionalProperties: true }
+    Money:
+      type: object
+      required: [amount_minor, currency]
+      properties:
+        amount_minor: { type: integer, minimum: 0, maximum: 99999999999999 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+    ListingWriteRequest:
+      type: object
+      properties:
+        reference: { type: string, minLength: 2, maxLength: 100, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$" }
+        intent: { type: string, enum: [sale, rent] }
+        property_type_slug: { type: string }
+        title: { type: [string, "null"], maxLength: 160 }
+        description: { type: [string, "null"], maxLength: 10000 }
+        price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+        bedrooms: { type: [integer, "null"], minimum: 0, maximum: 100 }
+        bathrooms: { type: [number, "null"], minimum: 0, maximum: 100 }
+        interior_area:
+          oneOf:
+            - type: object
+              required: [value, unit]
+              properties:
+                value: { type: number, exclusiveMinimum: 0, maximum: 10000000 }
+                unit: { type: string, enum: [sq_ft, sqm] }
+            - type: "null"
+        address:
+          oneOf:
+            - type: object
+              properties:
+                line_1: { type: [string, "null"], maxLength: 180 }
+                line_2: { type: [string, "null"], maxLength: 180 }
+                locality: { type: [string, "null"], maxLength: 120 }
+                region: { type: [string, "null"], maxLength: 120 }
+                postal_code: { type: [string, "null"], maxLength: 32 }
+                country_code: { type: [string, "null"], minLength: 2, maxLength: 2 }
+                latitude: { type: [number, "null"], minimum: -90, maximum: 90 }
+                longitude: { type: [number, "null"], minimum: -180, maximum: 180 }
+            - type: "null"
+        features:
+          type: object
+          maxProperties: 100
+          additionalProperties:
+            oneOf:
+              - { type: boolean }
+              - { type: integer }
+              - { type: number }
+              - { type: string }
+              - { type: "null" }
+        amenity_slugs:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string }
+    ListingCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ListingWriteRequest"
+        - type: object
+          required: [reference, intent, property_type_slug]
+    ListingUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ListingWriteRequest"
+        - type: object
+          required: [version]
+          properties:
+            version: { type: integer, minimum: 1 }
+    QualityCheck:
+      type: object
+      required: [key, complete, message]
+      properties:
+        key: { type: string, enum: [basics, location, description, features, media] }
+        complete: { type: boolean }
+        message: { type: string }
+    Quality:
+      type: object
+      required: [score, ready_for_review, checklist]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        ready_for_review: { type: boolean }
+        checklist:
+          type: array
+          items: { $ref: "#/components/schemas/QualityCheck" }
+    MediaDerivative:
+      type: object
+      required: [kind, mime_type, byte_size, width, height]
+      properties:
+        kind: { type: string, enum: [thumbnail, display] }
+        mime_type: { type: string, const: image/webp }
+        byte_size: { type: integer, minimum: 1 }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+    Media:
+      type: object
+      required: [id, original_name, mime_type, byte_size, width, height, position, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        original_name: { type: string }
+        mime_type: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        byte_size: { type: integer, minimum: 1, maximum: 15728640 }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        position: { type: integer, minimum: 1, maximum: 30 }
+        alt_text: { type: [string, "null"], maxLength: 300 }
+        derivatives:
+          type: array
+          items: { $ref: "#/components/schemas/MediaDerivative" }
+        created_at: { type: string, format: date-time }
+    Listing:
+      type: object
+      required: [id, property_id, agency_id, reference, intent, status, version, property, quality, media_count, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        property_id: { type: string, format: uuid }
+        agency_id: { type: string, format: uuid }
+        reference: { type: string }
+        intent: { type: string, enum: [sale, rent] }
+        status: { type: string, enum: [draft, changes_requested, in_review, published, withdrawn] }
+        version: { type: integer, minimum: 1 }
+        title: { type: [string, "null"] }
+        description: { type: [string, "null"] }
+        price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+        property:
+          type: object
+          required: [property_type, bedrooms, bathrooms, interior_area, address, features, amenities]
+          properties:
+            property_type:
+              type: object
+              required: [slug, name]
+              properties:
+                slug: { type: string }
+                name: { type: string }
+            bedrooms: { type: [integer, "null"] }
+            bathrooms: { type: [number, "null"] }
+            interior_area:
+              oneOf:
+                - type: object
+                  required: [sqm, sq_ft]
+                  properties:
+                    sqm: { type: number }
+                    sq_ft: { type: number }
+                - type: "null"
+            address: { type: [object, "null"], additionalProperties: true }
+            features: { type: object, additionalProperties: true }
+            amenities: { type: array, items: { type: string } }
+        quality: { $ref: "#/components/schemas/Quality" }
+        primary_media:
+          oneOf:
+            - $ref: "#/components/schemas/Media"
+            - type: "null"
+        media_count: { type: integer, minimum: 0, maximum: 30 }
+        submitted_at: { type: [string, "null"], format: date-time }
+        published_at: { type: [string, "null"], format: date-time }
+        updated_at: { type: string, format: date-time }
+    ListingResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/Listing" }
+    ListingPage:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Listing" }
+        meta:
+          type: object
+          required: [next_cursor]
+          properties:
+            next_cursor: { type: [string, "null"] }
+    MediaResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/Media" }
+    PublicMedia:
+      type: object
+      required: [id, alt_text, width, height, thumbnail_url, display_url]
+      properties:
+        id: { type: string, format: uuid }
+        alt_text: { type: [string, "null"] }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        thumbnail_url: { type: [string, "null"] }
+        display_url: { type: [string, "null"] }
+    PublicLocation:
+      type: object
+      required: [label, locality, region, country_code, policy, latitude, longitude]
+      properties:
+        label: { type: string }
+        locality: { type: [string, "null"] }
+        region: { type: [string, "null"] }
+        country_code: { type: [string, "null"] }
+        policy: { type: string, enum: [exact, approximate, hidden] }
+        latitude: { type: [number, "null"], minimum: -90, maximum: 90 }
+        longitude: { type: [number, "null"], minimum: -180, maximum: 180 }
+    PublicAgency:
+      type: object
+      required: [id, name, slug, verified]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        verified: { type: boolean }
+    PublicListingCard:
+      type: object
+      required: [id, slug, url, title, intent, price, property_type, bedrooms, bathrooms, interior_area, location, agency, primary_media, media_count, listed_at]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        url: { type: string }
+        title: { type: string }
+        intent: { type: string, enum: [sale, rent] }
+        price:
+          oneOf:
+            - $ref: "#/components/schemas/Money"
+            - type: "null"
+        property_type:
+          type: object
+          required: [slug, name]
+          properties:
+            slug: { type: string }
+            name: { type: string }
+        bedrooms: { type: [integer, "null"] }
+        bathrooms: { type: [number, "null"] }
+        interior_area:
+          oneOf:
+            - type: object
+              required: [sqm, sq_ft]
+              properties:
+                sqm: { type: number }
+                sq_ft: { type: number }
+            - type: "null"
+        location: { $ref: "#/components/schemas/PublicLocation" }
+        agency: { $ref: "#/components/schemas/PublicAgency" }
+        primary_media:
+          oneOf:
+            - $ref: "#/components/schemas/PublicMedia"
+            - type: "null"
+        media_count: { type: integer, minimum: 0 }
+        listed_at: { type: [string, "null"], format: date-time }
+    PublicListingDetail:
+      allOf:
+        - $ref: "#/components/schemas/PublicListingCard"
+        - type: object
+          required: [canonical_url, reference, description, features, amenities, media, price_history, engagement, similar_listings]
+          properties:
+            canonical_url: { type: string }
+            reference: { type: string }
+            description: { type: [string, "null"] }
+            features: { type: object, additionalProperties: true }
+            amenities: { type: array, items: { type: string } }
+            media: { type: array, items: { $ref: "#/components/schemas/PublicMedia" } }
+            price_history:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/Money"
+                  - type: object
+                    required: [effective_at]
+                    properties:
+                      effective_at: { type: string, format: date-time }
+            agency:
+              allOf:
+                - $ref: "#/components/schemas/PublicAgency"
+                - type: object
+                  required: [short_description, contact_handoff_available]
+                  properties:
+                    short_description: { type: [string, "null"] }
+                    contact_handoff_available: { type: boolean, const: false }
+            engagement:
+              type: object
+              required: [favorite, reaction]
+              properties:
+                favorite: { type: boolean }
+                reaction: { type: [string, "null"], enum: [like, dislike, null] }
+            similar_listings: { type: array, items: { $ref: "#/components/schemas/PublicListingCard" } }
+    PublicSearchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/PublicListingCard" } }
+        meta:
+          type: object
+          required: [count, next_cursor, applied_filters]
+          properties:
+            count: { type: integer, minimum: 0 }
+            next_cursor: { type: [string, "null"] }
+            applied_filters: { type: object, additionalProperties: true }
+    EngagementCollectionsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [favorites, likes, dislikes]
+          properties:
+            favorites: { type: array, items: { $ref: "#/components/schemas/PublicListingCard" } }
+            likes: { type: array, items: { $ref: "#/components/schemas/PublicListingCard" } }
+            dislikes: { type: array, items: { $ref: "#/components/schemas/PublicListingCard" } }
+    FavoriteMutationResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [listing_id, favorite]
+          properties:
+            listing_id: { type: string, format: uuid }
+            favorite: { type: boolean }
+    ReactionMutationResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [listing_id, reaction]
+          properties:
+            listing_id: { type: string, format: uuid }
+            reaction: { type: [string, "null"], enum: [like, dislike, null] }
     Error:
       type: object
       required: [error]
@@ -254,6 +1066,10 @@ components:
             message: { type: string }
             fields: { type: object, additionalProperties: true }
             request_id: { type: string }
+            current_version: { type: integer, minimum: 1 }
+            checklist:
+              type: array
+              items: { $ref: "#/components/schemas/QualityCheck" }
   responses:
     Unauthenticated:
       description: Authentication required
@@ -262,6 +1078,16 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     TenantDenied:
       description: Active user is not a member of the selected agency
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found inside the active tenant
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ConflictError:
+      description: Optimistic concurrency, reference, upload-key, or workflow conflict
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

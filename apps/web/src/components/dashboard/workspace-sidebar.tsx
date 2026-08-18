@@ -2,22 +2,22 @@ import Link from "next/link";
 import { BrandMark } from "@/components/brand/logo";
 import { Icon, type IconName } from "@/components/ui/icon";
 
-const items: Array<{ label: string; href: string; icon: IconName }> = [
-  { label: "Overview", href: "#overview", icon: "home" },
-  { label: "Properties", href: "#property-performance", icon: "building" },
-  { label: "Leads", href: "#recent-leads", icon: "team" },
-  { label: "Viewings", href: "#viewings", icon: "calendar" },
-  { label: "Messages", href: "#priorities", icon: "message" },
-  { label: "Customers", href: "#recent-leads", icon: "user" },
-  { label: "Team", href: "#storefront-setup", icon: "team" },
-  { label: "Analytics", href: "#property-performance", icon: "chart" },
-  { label: "Agency profile", href: "/agency/profile", icon: "building" },
-  { label: "Integrations", href: "#workspace-status", icon: "sparkle" },
-  { label: "Billing", href: "#workspace-status", icon: "shield" },
-  { label: "Settings", href: "#workspace-status", icon: "settings" },
+const items: Array<{ id: string; label: string; href: string; icon: IconName }> = [
+  { id: "overview", label: "Overview", href: "/agency/dashboard", icon: "home" },
+  { id: "properties", label: "Properties", href: "/agency/properties", icon: "building" },
+  { id: "leads", label: "Leads", href: "/agency/dashboard#recent-leads", icon: "team" },
+  { id: "viewings", label: "Viewings", href: "/agency/dashboard#viewings", icon: "calendar" },
+  { id: "messages", label: "Messages", href: "/agency/dashboard#priorities", icon: "message" },
+  { id: "customers", label: "Customers", href: "/agency/dashboard#recent-leads", icon: "user" },
+  { id: "team", label: "Team", href: "/agency/dashboard#storefront-setup", icon: "team" },
+  { id: "analytics", label: "Analytics", href: "/agency/dashboard#property-performance", icon: "chart" },
+  { id: "profile", label: "Agency profile", href: "/agency/profile", icon: "building" },
+  { id: "integrations", label: "Integrations", href: "/agency/dashboard#workspace-status", icon: "sparkle" },
+  { id: "billing", label: "Billing", href: "/agency/dashboard#workspace-status", icon: "shield" },
+  { id: "settings", label: "Settings", href: "/agency/dashboard#workspace-status", icon: "settings" },
 ];
 
-export function WorkspaceSidebar() {
+export function WorkspaceSidebar({ active = "overview" }: { active?: string }) {
   return (
     <aside className="workspace-sidebar">
       <div className="workspace-sidebar__brand"><BrandMark /></div>
@@ -25,8 +25,8 @@ export function WorkspaceSidebar() {
         <Icon name="building" /><span>Greenway Realty</span><Icon name="chevron-down" />
       </div>
       <nav aria-label="Agency workspace">
-        {items.map((item, index) => (
-          <Link className={index === 0 ? "is-active" : undefined} href={item.href} key={item.label}>
+        {items.map((item) => (
+          <Link className={item.id === active ? "is-active" : undefined} href={item.href} key={item.label}>
             <Icon name={item.icon} /><span>{item.label}</span>{item.label === "Messages" ? <i aria-label="Unread messages" /> : null}
           </Link>
         ))}
@@ -35,15 +35,15 @@ export function WorkspaceSidebar() {
   );
 }
 
-export function WorkspaceBottomNav() {
+export function WorkspaceBottomNav({ active = "overview" }: { active?: string }) {
   return (
     <nav className="workspace-bottom-nav" aria-label="Agency quick navigation">
-      {items.slice(0, 4).map((item, index) => (
-        <Link className={index === 0 ? "is-active" : undefined} href={item.href} key={item.label}>
+      {items.slice(0, 4).map((item) => (
+        <Link className={item.id === active ? "is-active" : undefined} href={item.href} key={item.label}>
           <Icon name={item.icon} /><span>{item.label}</span>
         </Link>
       ))}
-      <Link href="#workspace-status"><Icon name="menu" /><span>More</span></Link>
+      <Link href="/agency/dashboard#workspace-status"><Icon name="menu" /><span>More</span></Link>
     </nav>
   );
 }
