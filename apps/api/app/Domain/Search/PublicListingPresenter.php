@@ -79,7 +79,7 @@ final class PublicListingPresenter
             ])->all(),
             'agency' => array_merge($this->card($document)['agency'], [
                 'short_description' => $listing->agency->short_description,
-                'contact_handoff_available' => false,
+                'contact_handoff_available' => true,
             ]),
             'engagement' => $this->engagement($listing->id, $user),
             'similar_listings' => SearchDocument::query()

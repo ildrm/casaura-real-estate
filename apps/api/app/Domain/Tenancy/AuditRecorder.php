@@ -17,12 +17,33 @@ final class AuditRecorder
         ?array $after = null,
         ?string $agencyId = null,
     ): AuditLog {
+        return $this->recordEntity(
+            $request,
+            $action,
+            $entity ? $entity::class : null,
+            $entity?->getKey(),
+            $before,
+            $after,
+            $agencyId,
+        );
+    }
+
+    /** @param array<string, mixed>|null $before @param array<string, mixed>|null $after */
+    public function recordEntity(
+        Request $request,
+        string $action,
+        ?string $entityType,
+        ?string $entityId,
+        ?array $before = null,
+        ?array $after = null,
+        ?string $agencyId = null,
+    ): AuditLog {
         return AuditLog::query()->create([
             'actor_user_id' => $request->user()?->getAuthIdentifier(),
             'agency_id' => $agencyId,
             'action' => $action,
-            'entity_type' => $entity ? $entity::class : null,
-            'entity_id' => $entity?->getKey(),
+            'entity_type' => $entityType,
+            'entity_id' => $entityId,
             'before' => $before,
             'after' => $after,
             'ip_address' => $request->ip(),

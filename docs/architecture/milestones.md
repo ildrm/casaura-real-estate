@@ -35,16 +35,16 @@ Each phase ships as vertical slices with persistence, policy, API, UI, loading/e
 
 ## Phase 4 — Leads and collaboration
 
-- [ ] Contact-to-lead routing, CRM pipeline, viewings, realtime messages
-- [ ] Reminders, notifications, calendar adapters, response-time analytics
+- [x] Contact-to-lead routing, CRM pipeline, viewings, realtime messages
+- [x] Reminders, notifications, calendar adapters, response-time analytics
 
 ## Phase 5 — Agency product
 
-- [ ] Complete storefront/team/opening-hours/newsletter/analytics flows
+- [x] Complete storefront/team/opening-hours/newsletter/analytics flows
 
 ## Phase 6 — Administration
 
-- [ ] Moderation, settings, RBAC editor, flag UI, health, audit operations
+- [x] Moderation, settings, RBAC editor, flag UI, health, audit operations
 
 ## Phase 7 — Data integrations
 
@@ -99,3 +99,25 @@ Each phase ships as vertical slices with persistence, policy, API, UI, loading/e
 - API: Laravel Pint and the complete test suite passed after formatting; the OpenAPI YAML parses successfully.
 - Visual: desktop and 390-pixel mobile search/detail captures were inspected beside both approved Phase 3 concepts; the mobile detail reading order was corrected during acceptance. See the [fidelity ledger](../design/fidelity-ledger.md).
 - Integration note: the database search backend and SQLite spatial-equivalence path are exercised locally. The OpenSearch adapter and PostGIS expressions are implemented behind ports for the configured production services; live-provider validation remains part of deployment integration.
+
+## Latest Phase 4 verification — 2026-08-19
+
+- Specification: the leads/collaboration specification passed strict validation at 100/100 with no findings.
+- API: public inquiry routing, tenant CRM operations, UUIDv7 message cursors, viewing transitions/conflict warnings, reminders, notifications, calendar export, and canonical response metrics are represented in the versioned contract.
+- Web: the property inquiry, agency lead desk, account collaboration, messaging, viewing, reminder, notification, and response-metric flows have explicit loading/error/empty/conflict states on desktop and mobile.
+- Tests: the complete Laravel suite passed with 41 tests and 561 assertions; the complete Playwright suite passed 10/10 journeys across desktop Chromium and Pixel 7.
+
+## Latest Phase 5 verification — 2026-08-19
+
+- Specification: the agency-product specification passed strict validation at 100/100 with no findings.
+- API: safe storefront, weekly/exceptional hours, quota-bound team operations, consented subscriptions, single-send campaigns through a replaceable adapter, privacy-safe event recording, and date-bounded analytics are covered by feature tests and OpenAPI.
+- Web: the public storefront and agency growth workspace use real tenant projections; demo profile defaults, invented readiness, and synthetic dashboard metrics were removed during review.
+- Responsive acceptance: long agency/listing content has no body overflow at 375 or 390 pixels, operational labels are at least 13 pixels, and mobile actions/consent targets are at least 44 pixels.
+
+## Latest Phase 6 verification — 2026-08-19
+
+- Specification: the administration specification passed strict validation at 100/100 with no findings.
+- Authorization: agency roles do not inherit platform authority; moderation, settings, flags, custom RBAC, audits, and health each enforce named platform permissions server-side, with explicit partial/denied console states.
+- Contract and database: every `/api/v1` Laravel path/method has an exact OpenAPI match; the YAML parses successfully; all Phase 1–6 migrations and seeds completed from an empty PostgreSQL/PostGIS database.
+- Quality: Laravel Pint, Composer validation/advisory audit, ESLint, TypeScript, the Next.js production build (18 routes), npm advisory audit, and repository diff checks passed. Dependency audits reported no known vulnerabilities.
+- Visual: the required independent frontend evaluation passed on round two at 10/12 with no blocking items after desktop/mobile screenshots, computed typography/touch checks, profile persistence, RBAC synchronization, and responsive overflow review.

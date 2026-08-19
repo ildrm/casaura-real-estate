@@ -1,6 +1,6 @@
 # Visual fidelity and responsive acceptance ledger
 
-Reviewed on 2026-08-18 against the accepted Casaura marketplace, agency-dashboard, properties, and listing-editor concepts in this directory. The implementation was captured from the running Next.js application with Chromium at 1440×1100 desktop, 1536×1024 workspace, and 390×844 mobile viewports.
+Reviewed through 2026-08-19 against the accepted Casaura marketplace, agency-dashboard, properties, and listing-editor concepts in this directory. The implementation was captured from the running Next.js application with Chromium at desktop, tablet, Pixel 7, 390-pixel, and 375-pixel viewports.
 
 | Comparison point | Marketplace result | Agency workspace result |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ Reviewed on 2026-08-18 against the accepted Casaura marketplace, agency-dashboar
 | Imagery | Original generated, production-owned property imagery replaces the exact concept houses while retaining warm natural light, modern architecture, and editorial crops. | Listing thumbnails reuse the same owned image set; avatars intentionally use initials to avoid fabricated profile photography. |
 | Responsive behavior | Mobile stacks the hero and image, keeps the search first, uses a deliberate horizontal property rail, and turns the location mosaic and footer into clear single/two-column flows. | Mobile removes the desktop rail, presents metrics as a 2×2 grid, keeps primary actions reachable, and provides a fixed bottom navigation. |
 | Above-the-fold copy | Headline, supporting copy, search intents, primary search action, and conversational-search label match the accepted concept. | Greeting and attention copy match. The workspace labels accurately describe the implemented foundation. |
-| Interaction honesty | Search submits real URL state. Provider-dependent market data is labeled development preview data. Newsletter capture is withheld until a compliant provider/double-opt-in flow exists. | “Add property” now opens the persisted Phase 2 editor. Profile, storefront, setup, registration, inventory filters, autosave, media, and review actions are real; no fake successful controls are presented. |
+| Interaction honesty | Search submits real URL state. Provider-dependent market data is labeled development preview data. Property inquiry, account collaboration, reporting, and consented agency newsletter capture now persist through their API workflows. | “Add property” opens the persisted editor. Profile, storefront, collaboration, growth, team, campaign, analytics, moderation, flag, RBAC, and audit actions use real projections; the overview links to those sources instead of displaying invented counts or readiness. |
 
 ## Phase 2 listing-core comparison
 
@@ -37,18 +37,29 @@ Reviewed on 2026-08-18 against the accepted Casaura marketplace, agency-dashboar
 | Above-the-fold copy | The concept's location-specific “Homes near Oakridge” becomes “Homes for you” until a location query is applied; published count, sort, search control, and “Search this area” retain equivalent meaning without inventing locality context. | Title/location/price are dynamic listing values. “Approximate location” and the secure-handoff disclosure match the intended trust language; enquiry/viewing controls truthfully state their Phase 4 availability. |
 | Interaction and accessibility | Query/filter submission, sorting, list/map toggle, search-this-area, selection, property navigation, loading/error/empty states, and favorites are keyboard and touch operable. | Favorite, like/dislike, share, gallery/media delivery, account hydration, canonical metadata, JSON-LD, 404 behavior, and responsive landmarks are implemented; unavailable handoffs are disabled rather than simulated. |
 
+## Phase 4–6 operational experience comparison
+
+| Comparison point | Public and consumer result | Agency and platform result |
+| --- | --- | --- |
+| Composition | Property inquiry and abuse reporting remain subordinate to the media-first property narrative. Agency storefronts retain the editorial identity/story/team/listing sequence, with hours/contact/newsletter in a clear supporting rail. | Leads use a queue/detail/operations-rail layout; growth groups readiness, hours/closures, team, campaigns, and honest analytics; administration uses health plus permission-aware operational tabs. |
+| Data honesty | Inquiry success describes contact handoff without promising an anonymous account conversation. Storefront listings, team, hours, subscription state, account conversations, and viewings come from API projections. | The dashboard contains no demo person, synthetic zero metrics, or invented completion score. The profile form hydrates the selected tenant before enabling edits; custom-role permission changes synchronize through the API. |
+| State and safety | Public 404s, feature-disabled newsletter capture, authentication-required reports, empty inventory, private account state, calendar downloads, and polling errors are explicit. | Version conflicts, viewing warnings/transitions, reminder outcomes, feature gates, quotas, partial platform permissions, secret redaction, immutable system roles, and denied access are visible without simulating success. |
+| Responsive behavior | Long agency/listing names, contact values, consent text, and property facts remain contained at 375 and 390 pixels with no body overflow. | Dense records collapse or wrap without page-level horizontal scrolling. Mobile operational controls and consent targets are at least 44 pixels; labels/control text use the 13/14/15-pixel phase scale. |
+| Accessibility | Forms have visible labels, consent is explicit, messages use live regions/log semantics, keyboard focus remains visible, and touch actions meet the accepted minimum target. | Console tabs, queue selection, status actions, schedule/campaign forms, role permission checkboxes, and responsive navigation are keyboard operable with programmatic labels. |
+| Visual acceptance | Forest/sage/terracotta accents, serif editorial headings, restrained borders, and owned listing imagery preserve the established Casaura voice. | Independent round-two evaluation passed at 10/12 with no blocking items after desktop/mobile capture, computed typography/touch checks, and long-content fixtures. |
+
 ## Intentional deviations
 
 - The hero and property photography is newly generated for Casaura rather than copied from the concepts.
 - A small “Workspace protected” panel makes tenant and permission enforcement explicit below the main dashboard fold.
-- The public footer explains why email capture is unavailable instead of simulating a newsletter subscription.
+- Newsletter capture is shown only on an enabled agency storefront and records explicit consent through the persisted subscription endpoint; disabled agencies show an honest unavailable state.
 - The marketplace concept is a compressed 864-pixel-wide desktop artboard, so the implementation comparison used a practical 1440-pixel desktop viewport with a similar full-page aspect ratio; mobile was verified separately at 390 pixels.
 - Phase 2 inventory captures use three real test drafts instead of the concept’s larger polished catalogue. Their neutral glyph thumbnails and 40% quality/readiness values accurately represent missing media/location/features.
 - The properties table uses a direct “Edit” action instead of an ambiguous overflow menu; pagination is an honest cursor “Load more” action rather than numbered pages.
 - The editor allows 160 title characters instead of the concept’s illustrative 80-character counter, matching the approved API constraint and specification.
 - Phase 3 uses a provider-free, data-derived map surface because no external tile-provider account is configured. Real bounds/radius filtering and safe public coordinates are implemented behind the visual abstraction.
 - Phase 3 acceptance inventory is generated through real E2E publication and intentionally contains unique test labels and tiny test images. Empty media areas stay neutral rather than substituting deceptive stock photography.
-- Contact and viewing controls remain disabled with an explicit Phase 4 disclosure; they will only activate when lead routing, consent, notifications, and scheduling are persisted end to end.
+- External newsletter delivery, calendar synchronization, and notification transports remain behind replaceable ports; local adapters provide deterministic development/test behavior until providers are selected.
 
 ## Corrections made during acceptance
 
@@ -59,5 +70,9 @@ Reviewed on 2026-08-18 against the accepted Casaura marketplace, agency-dashboar
 - Changed the new-editor state from an inaccurate initial “Draft saved” label to “Draft not saved,” then synchronized the saved label with the persisted dynamic edit URL before reload.
 - Re-captured the desktop editor only after dynamic-route hydration so the acceptance artifact represents the stable implementation rather than its loading state.
 - Removed the mobile property-detail agency-first ordering after visual inspection so listing identity, price, facts, and engagement precede the future contact handoff.
+- Replaced the dashboard's demo identity, invented readiness percentage, and synthetic metrics with neutral navigation to live API-backed workspaces.
+- Replaced seeded profile values with active-tenant loading, controlled edits, save/reload persistence, and explicit loading/error states.
+- Raised operational typography to the phase scale, expanded mobile controls and consent labels to accepted touch targets, and contained long dynamic storefront/property content at both 375 and 390 pixels.
+- Added editable custom-role permission synchronization and verified it with an authorized platform fixture.
 
-The in-app-browser integration was unavailable in this environment, so the required visual and interaction checks used the installed Playwright Chromium fallback. All accepted concept files and their final desktop/mobile implementation captures were inspected in the same comparison passes. Temporary capture scripts were removed; ignored `qa-*.png` artifacts remain local verification evidence only.
+The required visual and interaction checks used installed Playwright Chromium. All accepted concept files and final desktop/mobile implementation captures were inspected in the same comparison passes. The required independent evaluator passed the revised implementation at 10/12 with no blockers; temporary services and capture scripts were stopped or removed after acceptance.

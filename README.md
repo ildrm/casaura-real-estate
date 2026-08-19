@@ -1,6 +1,6 @@
 # Casaura
 
-Casaura is an API-first, multi-tenant real-estate marketplace and agency workspace. This repository contains the Phase 1 foundation: architecture, Laravel API, Next.js web application, tenant-aware agency domain, RBAC, feature entitlements, audit logging, local infrastructure, and automated isolation tests.
+Casaura is an API-first, multi-tenant real-estate marketplace and agency workspace. This repository contains the verified foundation through Phase 6: identity and tenancy, listing workflow and media, consumer search and engagement, lead collaboration, agency growth, and platform administration.
 
 ## Repository
 

@@ -55,6 +55,8 @@ export async function apiMutation<T>(
     } satisfies ApiError;
   }
 
+  if (response.status === 204) return undefined as T;
+
   return (await response.json()) as T;
 }
 
@@ -95,6 +97,29 @@ export async function publicApiQuery<T>(path: string): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+export async function apiTextQuery(path: string, agencyId?: string): Promise<{ body: string; contentType: string }> {
+  const response = await fetch(`${API_URL}${path}`, {
+    credentials: "include",
+    headers: {
+      Accept: "text/calendar, text/plain, application/json",
+      ...(agencyId ? { "Agency-ID": agencyId } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: ApiError } | null;
+    throw payload?.error ?? {
+      code: "REQUEST_FAILED",
+      message: "The requested file could not be prepared.",
+    } satisfies ApiError;
+  }
+
+  return {
+    body: await response.text(),
+    contentType: response.headers.get("content-type") ?? "text/plain;charset=utf-8",
+  };
 }
 
 export function publicAssetUrl(path?: string | null): string | null {

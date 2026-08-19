@@ -8,6 +8,8 @@ use Illuminate\Support\Carbon;
 
 final class FeatureResolver
 {
+    public const GLOBAL_SCOPE_ID = '00000000-0000-0000-0000-000000000000';
+
     /** @return array{enabled: bool, value: mixed, source: string} */
     public function resolve(string $key, Agency $agency): array
     {
@@ -50,6 +52,17 @@ final class FeatureResolver
                 'value' => $value,
                 'source' => 'plan',
             ];
+        }
+
+        $globalOverride = $flag->overrides()
+            ->where('scope_type', 'global')
+            ->where('scope_id', self::GLOBAL_SCOPE_ID)
+            ->where(fn ($query) => $query->whereNull('starts_at')->orWhere('starts_at', '<=', $now))
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', $now))
+            ->first();
+
+        if ($globalOverride) {
+            return ['enabled' => $globalOverride->enabled, 'value' => $globalOverride->value, 'source' => 'global_override'];
         }
 
         return ['enabled' => $flag->default_enabled, 'value' => null, 'source' => 'global'];

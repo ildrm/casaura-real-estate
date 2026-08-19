@@ -47,12 +47,17 @@ async function uploadImage(page: Page, listingId: string, agencyId: string, posi
   }, { apiUrl: API_URL, listingId, agencyId, position, tinyPng });
 }
 
+async function expectNoHorizontalOverflowAt(page: Page, width: 375 | 390): Promise<void> {
+  await page.setViewportSize({ width, height: 812 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+}
+
 test("published inventory flows from search and map to detail, favorite, and account", async ({ page }, testInfo) => {
   const suffix = `${testInfo.project.name.replace(/[^a-z0-9]/gi, "").toLowerCase()}.${Date.now()}`;
-  const title = `Oakridge market home ${suffix}`;
+  const title = `Oakridge International Multi-Generational Market Residence ${suffix}`;
 
   await page.goto("/register/agency");
-  await page.getByLabel("Agency name").fill(`Marketplace Realty ${suffix}`);
+  await page.getByLabel("Agency name").fill(`Marketplace International Neighborhood Property Advisors ${suffix}`);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Your name").fill("Morgan Lee");
   await page.getByLabel("Work email").fill(`marketplace.${suffix}@example.com`);
@@ -82,7 +87,7 @@ test("published inventory flows from search and map to detail, favorite, and acc
   await apiJson(page, `/api/v1/listings/${created.data.id}/submit`, "POST", {}, agencyId as string);
   await apiJson(page, `/api/v1/listings/${created.data.id}/publish`, "POST", {}, agencyId as string);
 
-  await page.goto(`/search?q=${encodeURIComponent(title)}&intent=buy`);
+  await page.goto("/search?q=Oakridge&intent=buy");
   await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   if (testInfo.project.name.includes("mobile")) {
     await page.getByRole("button", { name: "Map", exact: true }).click();
@@ -95,6 +100,18 @@ test("published inventory flows from search and map to detail, favorite, and acc
   await expect(page).toHaveURL(new RegExp(`/property/.+-${created.data.id}$`));
   await expect(page.getByRole("heading", { name: title, exact: true, level: 1 })).toBeVisible();
   await expect(page.getByText("Approximate location")).toBeVisible();
+  await expectNoHorizontalOverflowAt(page, 375);
+  await expectNoHorizontalOverflowAt(page, 390);
+  const consent = page.getByLabel(/I agree that Casaura can share/);
+  await expect.poll(async () => (await page.getByRole("button", { name: "Send inquiry" }).boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await expect.poll(async () => (await consent.locator("..").boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  await expect.poll(() => consent.locator("..").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(13);
+
+  await page.getByLabel("Your name").fill("Morgan Lee");
+  await page.getByLabel("Email").fill(`marketplace.${suffix}@example.com`);
+  await consent.check();
+  await page.getByRole("button", { name: "Send inquiry" }).click();
+  await expect(page.getByText(/Your inquiry has been sent to/)).toBeVisible();
 
   const favorite = page.getByRole("button", { name: "Favorite" });
   await favorite.click();
@@ -104,6 +121,8 @@ test("published inventory flows from search and map to detail, favorite, and acc
 
   await page.goto("/account");
   await expect(page.getByRole("heading", { name: "Your property search" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agency collaboration" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Property inquiry/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   await expect(page.locator("body")).not.toHaveCSS("overflow-x", "scroll");
 });

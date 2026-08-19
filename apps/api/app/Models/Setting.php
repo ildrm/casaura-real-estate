@@ -9,7 +9,7 @@ class Setting extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['namespace', 'key', 'value', 'is_secret'];
+    protected $fillable = ['namespace', 'key', 'value', 'is_secret', 'version'];
 
     public static function read(string $namespace, string $key, mixed $default = null): mixed
     {

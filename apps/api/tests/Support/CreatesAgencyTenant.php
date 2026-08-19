@@ -4,7 +4,9 @@ namespace Tests\Support;
 
 use App\Models\Agency;
 use App\Models\AgencyMember;
+use App\Models\Plan;
 use App\Models\Role;
+use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Laravel\Sanctum\Sanctum;
@@ -28,6 +30,11 @@ trait CreatesAgencyTenant
             'accepted_at' => now(),
         ]);
         $membership->roles()->attach(Role::query()->where('slug', 'agency_owner')->firstOrFail());
+        if ($plan = Plan::query()->where('slug', 'launch')->first()) {
+            Subscription::query()->firstOrCreate(['agency_id' => $agency->id], [
+                'plan_id' => $plan->id, 'status' => 'active', 'billing_status' => 'not_required',
+            ]);
+        }
 
         return [$user, $agency];
     }

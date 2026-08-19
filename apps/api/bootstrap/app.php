@@ -1,9 +1,11 @@
 <?php
 
+use App\Domain\ApiException;
 use App\Domain\Listings\ListingException;
 use App\Domain\Search\SearchException;
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\EnsurePermission;
+use App\Http\Middleware\EnsurePlatformPermission;
 use App\Http\Middleware\ResolveAgencyTenant;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -26,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant' => ResolveAgencyTenant::class,
             'permission' => EnsurePermission::class,
+            'platform_permission' => EnsurePlatformPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -64,6 +67,21 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (ListingException $exception, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => array_merge([
+                    'code' => $exception->errorCode,
+                    'message' => $exception->getMessage(),
+                    'fields' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ], $exception->context),
+            ], $exception->status);
+        });
+
+        $exceptions->render(function (ApiException $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
             }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PublicPropertyCard } from "@/components/marketplace/public-property-card";
+import { AccountCollaboration } from "@/components/marketplace/account-collaboration";
 import { Icon } from "@/components/ui/icon";
 import { apiQuery, type ApiError } from "@/lib/api-client";
 import type { EngagementResponse, PublicListingCard } from "@/lib/public-marketplace-types";
@@ -30,7 +31,7 @@ export function AccountDashboard() {
     {error?.code === "UNAUTHENTICATED" ? <section className="account-sign-in"><Icon name="user" /><h2>Sign in to see your saved homes</h2><p>Your account state is private and never inferred from another visitor’s activity.</p><Link className="button button--primary" href="/sign-in?next=/account">Sign in</Link></section> : null}
     {error && error.code !== "UNAUTHENTICATED" ? <section className="account-sign-in" role="alert"><Icon name="shield" /><h2>Account state is unavailable</h2><p>{error.message}</p><button className="button button--outline" type="button" onClick={() => window.location.reload()}>Try again</button></section> : null}
     {!error && !data ? <section className="account-loading" role="status"><span /> Loading your private shortlist…</section> : null}
-    {data ? <div className="account-sections">{sections.map((section) => <AccountSection key={section.key} title={section.label} empty={section.empty} listings={data[section.key]} />)}</div> : null}
+    {data ? <><AccountCollaboration /><div className="account-sections">{sections.map((section) => <AccountSection key={section.key} title={section.label} empty={section.empty} listings={data[section.key]} />)}</div></> : null}
   </main>;
 }
 

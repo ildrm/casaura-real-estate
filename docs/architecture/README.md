@@ -11,5 +11,8 @@ The living architecture package is split into documents that evolve with each ve
 - [../design/fidelity-ledger.md](../design/fidelity-ledger.md) — concept comparison, responsive acceptance results, and intentional deviations.
 - [../specs/phase-2-listing-core.md](../specs/phase-2-listing-core.md) — approved Phase 2 listing, workflow, media, and responsive acceptance contract.
 - [../specs/phase-3-consumer-marketplace.md](../specs/phase-3-consumer-marketplace.md) — approved Phase 3 public search, property detail, privacy, engagement, and responsive acceptance contract.
+- [../specs/phase-4-leads-collaboration.md](../specs/phase-4-leads-collaboration.md) — approved Phase 4 lead routing, CRM, viewings, messaging, reminders, notifications, calendar, and response analytics contract.
+- [../specs/phase-5-agency-product.md](../specs/phase-5-agency-product.md) — approved Phase 5 storefront, team, opening-hours, newsletter, and agency analytics contract.
+- [../specs/phase-6-administration.md](../specs/phase-6-administration.md) — approved Phase 6 moderation, settings, RBAC, flags, health, audit, and responsive operations contract.
 
-The machine-readable API contract through Phase 3 lives at [packages/contracts/openapi.yaml](../../packages/contracts/openapi.yaml).
+The machine-readable API contract through Phase 6 lives at [packages/contracts/openapi.yaml](../../packages/contracts/openapi.yaml).

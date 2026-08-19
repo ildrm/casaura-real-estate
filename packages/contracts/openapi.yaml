@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Casaura API
-  version: 1.2.0-phase3
-  description: Versioned contract through Phase 3 for identity, agencies, tenancy, listings, private media, public marketplace search, spatial privacy, and consumer engagement.
+  version: 1.5.0-phase6
+  description: Versioned contract through Phase 6 for identity, tenancy, listings, marketplace, engagement, collaboration, agency growth, and administration.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local development
@@ -14,6 +14,9 @@ tags:
   - name: Media
   - name: Marketplace
   - name: Engagement
+  - name: Collaboration
+  - name: Agency Product
+  - name: Administration
 paths:
   /health:
     get:
@@ -618,6 +621,341 @@ paths:
               schema: { $ref: "#/components/schemas/ReactionMutationResponse" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /public/listings/{listing}/leads:
+    post:
+      tags: [Collaboration]
+      operationId: createPublicLead
+      parameters: [{ $ref: "#/components/parameters/ListingId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublicLeadRequest" }
+      responses:
+        "201": { description: Inquiry, lead, conversation, notification, and audit evidence created, content: { application/json: { schema: { $ref: "#/components/schemas/LeadResponse" } } } }
+        "200": { description: Idempotent inquiry replay, content: { application/json: { schema: { $ref: "#/components/schemas/LeadResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /leads:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: listLeads
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses:
+        "200": { description: Tenant-scoped cursor lead page }
+        "403": { $ref: "#/components/responses/TenantDenied" }
+  /leads/{lead}:
+    parameters:
+      - { in: path, name: lead, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/AgencyId" }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: getLead
+      responses: { "200": { description: Tenant lead, content: { application/json: { schema: { $ref: "#/components/schemas/LeadResponse" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: updateLead
+      responses: { "200": { description: Versioned lead update }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/ConflictError" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /conversations/{conversation}/messages:
+    parameters:
+      - { in: path, name: conversation, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: listConversationMessages
+      responses: { "200": { description: Participant-scoped cursor messages }, "404": { $ref: "#/components/responses/NotFound" } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: sendConversationMessage
+      responses: { "201": { description: Plain-text message created }, "404": { $ref: "#/components/responses/NotFound" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /viewings:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: listViewings
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant viewings, content: { application/json: { schema: { $ref: "#/components/schemas/ViewingListResponse" } } } } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: createViewing
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "201": { description: Timezone-aware viewing created with non-blocking overlap warnings, content: { application/json: { schema: { $ref: "#/components/schemas/ViewingResponse" } } } }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /viewings/{viewing}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: updateViewing
+      parameters:
+        - { in: path, name: viewing, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Versioned viewing transition with non-blocking overlap warnings, content: { application/json: { schema: { $ref: "#/components/schemas/ViewingResponse" } } } }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /viewings/{viewing}/calendar:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: exportViewingCalendar
+      parameters:
+        - { in: path, name: viewing, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Authorized RFC 5545 calendar event, content: { text/calendar: { schema: { type: string } } } }
+        "409": { $ref: "#/components/responses/ConflictError" }
+  /account/collaboration:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: accountCollaboration
+      responses: { "200": { description: Current consumer conversations and viewings } }
+  /notifications:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: listNotifications
+      responses: { "200": { description: Current user's notifications } }
+  /notifications/{notification}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: updateNotificationReadState
+      parameters:
+        - { in: path, name: notification, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: User-owned read state updated }, "404": { $ref: "#/components/responses/NotFound" } }
+  /reminders:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: listReminders
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant reminder list } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: createReminder
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "201": { description: Tenant-scoped reminder created }, "404": { $ref: "#/components/responses/NotFound" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /reminders/{reminder}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: updateReminder
+      parameters:
+        - { in: path, name: reminder, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Reminder completed or cancelled }, "404": { $ref: "#/components/responses/NotFound" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /agency/analytics/collaboration:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Collaboration]
+      operationId: collaborationAnalytics
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Canonical response-time aggregates } }
+  /public/agencies/{agency}:
+    get:
+      tags: [Agency Product]
+      operationId: publicAgencyStorefront
+      parameters:
+        - { in: path, name: agency, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Allowlisted storefront, content: { application/json: { schema: { $ref: "#/components/schemas/StorefrontResponse" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /agency/opening-hours:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: getOpeningHours
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant weekly hours and closures } }
+    put:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: replaceOpeningHours
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Weekly hours replaced atomically }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /agency/feature-flags:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: listEffectiveAgencyFeatureFlags
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Effective tenant feature resolution } }
+  /agency/team:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: listAgencyTeam
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant team and quota } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: inviteAgencyMember
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "201": { description: Member invited with safe agency role }, "409": { $ref: "#/components/responses/ConflictError" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /agency/team/{member}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: updateAgencyMember
+      parameters:
+        - { in: path, name: member, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Member status, title, or role updated }, "404": { $ref: "#/components/responses/NotFound" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /public/agencies/{agency}/newsletter/subscriptions:
+    post:
+      tags: [Agency Product]
+      operationId: subscribeAgencyNewsletter
+      parameters:
+        - { in: path, name: agency, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses: { "201": { description: Consented subscriber created }, "200": { description: Idempotent replay }, "403": { description: Feature disabled }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /public/newsletter/subscriptions/{token}:
+    delete:
+      tags: [Agency Product]
+      operationId: unsubscribeAgencyNewsletter
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses: { "204": { description: Subscription idempotently deactivated }, "404": { $ref: "#/components/responses/NotFound" } }
+  /agency/newsletter/campaigns:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: listNewsletterCampaigns
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant campaign list } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: createNewsletterCampaign
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "201": { description: Draft campaign created }, "403": { description: Feature disabled }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /agency/newsletter/campaigns/{campaign}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: updateNewsletterCampaign
+      parameters:
+        - { in: path, name: campaign, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Draft campaign content updated }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/ConflictError" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /agency/newsletter/campaigns/{campaign}/send:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: sendNewsletterCampaign
+      parameters:
+        - { in: path, name: campaign, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Campaign sent once through configured adapter }, "404": { $ref: "#/components/responses/NotFound" } }
+  /agency/analytics:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: agencyAnalytics
+      parameters:
+        - { $ref: "#/components/parameters/AgencyId" }
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+      responses: { "200": { description: Date-bounded canonical agency aggregates }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /public/listings/{listing}/reports:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: reportPublishedListing
+      parameters: [{ $ref: "#/components/parameters/ListingId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Immutable report and open case created }, "200": { description: Idempotent replay }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /admin/moderation-cases:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: listModerationCases
+      responses: { "200": { description: Platform moderation queue }, "403": { $ref: "#/components/responses/TenantDenied" } }
+  /admin/moderation-cases/{case}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: updateModerationCase
+      parameters:
+        - { in: path, name: case, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Versioned moderation transition }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /admin/settings:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: listAdminSettings
+      responses: { "200": { description: Allowlisted settings with secret values redacted }, "403": { $ref: "#/components/responses/TenantDenied" } }
+  /admin/settings/{namespace}/{key}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: updateAdminSetting
+      parameters:
+        - { in: path, name: namespace, required: true, schema: { type: string } }
+        - { in: path, name: key, required: true, schema: { type: string } }
+      responses: { "200": { description: Non-secret setting updated with optimistic version }, "409": { $ref: "#/components/responses/ConflictError" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /admin/feature-flags:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: listAdminFeatureFlags
+      responses: { "200": { description: Flags and validity-windowed overrides } }
+  /admin/feature-flags/{flag}/overrides:
+    put:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: upsertFeatureFlagOverride
+      parameters:
+        - { in: path, name: flag, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Audited global or agency override }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /admin/feature-flags/{flag}/overrides/{override}:
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: deleteFeatureFlagOverride
+      parameters:
+        - { in: path, name: flag, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: override, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Override deleted with audit evidence }, "404": { $ref: "#/components/responses/NotFound" } }
+  /admin/roles:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: listRolesAndPermissions
+      responses: { "200": { description: Permission catalogue and role projections } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: createCustomRole
+      responses: { "201": { description: Safe non-system role created }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /admin/roles/{role}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: updateCustomRole
+      parameters:
+        - { in: path, name: role, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Custom role updated }, "409": { $ref: "#/components/responses/ConflictError" }, "422": { $ref: "#/components/responses/ValidationError" } }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: deleteCustomRole
+      responses: { "204": { description: Custom role deleted }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /admin/audit-logs:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: listAuditLogs
+      responses: { "200": { description: Redacted immutable cursor audit page } }
+  /admin/health:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Administration]
+      operationId: adminHealth
+      responses: { "200": { description: Safe component health and backlog counts, content: { application/json: { schema: { $ref: "#/components/schemas/AdminHealthResponse" } } } } }
 components:
   securitySchemes:
     sanctum:
@@ -654,6 +992,96 @@ components:
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, format: password, minLength: 12 }
         password_confirmation: { type: string, format: password }
+    PublicLeadRequest:
+      type: object
+      required: [name, email, message, consent]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: [string, "null"], maxLength: 40 }
+        message: { type: string, minLength: 10, maxLength: 5000 }
+        consent: { type: boolean, const: true }
+    Lead:
+      type: object
+      required: [id, listing_id, status, priority, contact, version, conversation_id]
+      properties:
+        id: { type: string, format: uuid }
+        listing_id: { type: string, format: uuid }
+        status: { type: string, enum: [new, contacted, qualified, viewing, won, lost] }
+        priority: { type: string, enum: [low, normal, high] }
+        contact:
+          type: object
+          required: [name, email, phone]
+          properties:
+            name: { type: string }
+            email: { type: string, format: email }
+            phone: { type: [string, "null"] }
+        assigned_member_id: { type: [string, "null"], format: uuid }
+        first_responded_at: { type: [string, "null"], format: date-time }
+        version: { type: integer, minimum: 1 }
+        conversation_id: { type: string, format: uuid }
+    LeadResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/Lead" }
+    ViewingWarning:
+      type: object
+      required: [code, message, overlap_count]
+      properties:
+        code: { type: string, const: VIEWING_SCHEDULE_OVERLAP }
+        message: { type: string }
+        overlap_count: { type: integer, minimum: 1 }
+    Viewing:
+      type: object
+      required: [id, lead_id, listing_id, assigned_member_id, starts_at, ends_at, timezone, status, notes, version, warnings]
+      properties:
+        id: { type: string, format: uuid }
+        lead_id: { type: string, format: uuid }
+        listing_id: { type: string, format: uuid }
+        assigned_member_id: { type: [string, "null"], format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        timezone: { type: string }
+        status: { type: string, enum: [requested, confirmed, completed, cancelled, no_show] }
+        notes: { type: [string, "null"] }
+        version: { type: integer, minimum: 1 }
+        warnings: { type: array, items: { $ref: "#/components/schemas/ViewingWarning" } }
+    ViewingResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/Viewing" }
+    ViewingListResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Viewing" } }
+    StorefrontResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [agency, opening_hours, team, listings]
+          properties:
+            agency: { type: object, additionalProperties: true }
+            opening_hours: { type: array, items: { type: object, additionalProperties: true } }
+            team: { type: array, items: { type: object, additionalProperties: true } }
+            listings: { type: array, items: { $ref: "#/components/schemas/PublicListingCard" } }
+    AdminHealthResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status, version, checked_at, components, request_id]
+          properties:
+            status: { type: string, enum: [ok, degraded] }
+            version: { type: string }
+            checked_at: { type: string, format: date-time }
+            components: { type: object, additionalProperties: true }
+            request_id: { type: string, format: uuid }
     Agency:
       type: object
       required: [id, name, slug, verification_status, status, timezone]
@@ -1003,7 +1431,7 @@ components:
                   required: [short_description, contact_handoff_available]
                   properties:
                     short_description: { type: [string, "null"] }
-                    contact_handoff_available: { type: boolean, const: false }
+                    contact_handoff_available: { type: boolean, const: true }
             engagement:
               type: object
               required: [favorite, reaction]

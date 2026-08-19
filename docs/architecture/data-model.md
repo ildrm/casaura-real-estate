@@ -88,6 +88,40 @@ erDiagram
 | `property_reactions` | Unique `(user_id, listing_id)` private `like`/`dislike` state; replacement does not create duplicate reactions |
 | PostgreSQL spatial extensions | PostGIS geography points and GiST indexes for public and private locations; SQLite stores equivalent scalar coordinates for deterministic local tests |
 
+## Phase 4 physical tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `leads` | Agency/listing/consumer/assignee ownership; idempotency key and payload hash; validated contact; status, priority, optimistic version, response timestamps; tenant pipeline index |
+| `lead_status_history` | Append-only from/to status and assignee, actor, note, and timestamp |
+| `conversations` | One agency-owned conversation per lead with listing subject and last-message cursor timestamp |
+| `conversation_participants` | Unique conversation/user role; participant scope is authoritative for consumer access |
+| `messages` | UUIDv7 cursor identity, participant sender, plain-text body, append-only timestamp |
+| `viewing_requests` | Agency/lead/listing/consumer/assignee, timezone-aware interval, status, notes, optimistic version |
+| `viewing_status_history` | Append-only viewing transition evidence |
+| `reminders` | Agency and assigned-user scope, optional lead/viewing target, due/status/dispatched timestamps |
+| `notifications` | User-owned in-app notification with optional agency, allowlisted data, read time, and deduplication key |
+
+## Phase 5 physical tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `agency_opening_hours` | Unique agency/weekday schedule with explicit closed state |
+| `agency_closures` | Unique agency/date exception with optional reduced hours/reason |
+| `newsletter_subscribers` | Unique agency/email consent record, idempotency evidence, hashed unsubscribe token, and lifecycle timestamps |
+| `newsletter_campaigns` | Agency/author draft or sent plain-text campaign with immutable sent timestamp |
+| `newsletter_events` | Unique campaign/subscriber delivery outcome and adapter name; append-only |
+| `analytics_events` | Privacy-safe agency/listing event type, hourly anonymous-session hash for public-view deduplication, allowlisted metadata, and occurrence timestamp |
+
+## Phase 6 physical tables and extensions
+
+| Table or extension | Important fields and constraints |
+| --- | --- |
+| `abuse_reports` | Immutable reporter/listing/category/details plus idempotency evidence |
+| `moderation_cases` | One case per report, target, workflow status, assignee, outcome/note, optimistic version |
+| `moderation_case_history` | Append-only actor/assignee/status/outcome evidence |
+| `settings.version` | Optimistic version for non-secret platform setting updates; secret values remain externally managed |
+
 ## Planned marketplace tables
 
 The following are designed now and delivered by vertical slice, not as empty speculative migrations:
@@ -96,10 +130,10 @@ The following are designed now and delivered by vertical slice, not as empty spe
 - Geography: `locations`, `geographic_boundaries`, parcel/cadastral provider references.
 - Media extensions: `floor_plans`, `property_documents`, `upload_sessions`, `storage_migrations`.
 - Discovery/engagement: `collections`, `collection_members`, `collection_properties`, `property_comments`, `property_ratings`, `saved_searches`, `search_alerts`, `search_demand_events`.
-- CRM/collaboration: `leads`, `lead_status_history`, `viewing_requests`, `open_houses`, `conversations`, `conversation_participants`, `messages`, `notifications`.
-- Agency growth: `agency_opening_hours`, `agency_verifications`, `agents`, `newsletter_subscribers`, `newsletter_campaigns`, `newsletter_events`, `analytics_events`.
+- CRM/collaboration extensions: `open_houses` and provider-specific delivery receipts.
+- Agency growth extensions: `agency_verifications`, dedicated agent profiles, and external campaign-provider state.
 - Integrations: `real_estate_data_providers`, `provider_connections`, `data_source_records`, `field_mappings`, `sync_jobs`, `import_errors`, `duplicate_candidates`.
-- Trust/admin: `moderation_cases`, `abuse_reports`, `settings`, `cms_entries`, `invoices`.
+- Trust/admin extensions: `cms_entries`, sanctions/appeals, and `invoices`.
 
 ## Index strategy
 

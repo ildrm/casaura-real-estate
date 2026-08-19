@@ -11,10 +11,11 @@ test("consumer search preserves intent and query", async ({ page }) => {
 
 test("agency owner can register and enter the tenant workspace", async ({ page }, testInfo) => {
   const project = testInfo.project.name.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const agencyName = `Tenant Truth Realty ${project} ${Date.now()}`;
   const email = `maya.${project}.${Date.now()}@example.com`;
 
   await page.goto("/register/agency");
-  await page.getByLabel("Agency name").fill("Greenway Realty QA");
+  await page.getByLabel("Agency name").fill(agencyName);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Your name").fill("Maya Patel");
   await page.getByLabel("Work email").fill(email);
@@ -24,6 +25,19 @@ test("agency owner can register and enter the tenant workspace", async ({ page }
   await page.getByRole("button", { name: "Create agency workspace" }).click();
 
   await expect(page).toHaveURL(/\/agency\/dashboard$/);
-  await expect(page.getByRole("heading", { name: "Good morning, Maya" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agency overview" })).toBeVisible();
+  await expect(page.getByText("Signed-in user")).toHaveCount(1);
+  await expect(page.getByText(/80% complete/)).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("casaura.activeAgencyId"))).not.toBeNull();
+
+  await page.goto("/agency/profile");
+  await expect(page.getByLabel("Public agency name")).toHaveValue(agencyName);
+  await expect(page.getByLabel("Short description")).toHaveValue("");
+  await expect(page.getByLabel("Website")).toHaveValue("");
+  await page.getByLabel("Short description").fill("A profile loaded from and saved to the active tenant.");
+  await page.getByRole("button", { name: "Save agency profile" }).click();
+  await expect(page.getByText("Agency profile saved.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Public agency name")).toHaveValue(agencyName);
+  await expect(page.getByLabel("Short description")).toHaveValue("A profile loaded from and saved to the active tenant.");
 });

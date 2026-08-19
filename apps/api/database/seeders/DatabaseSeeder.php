@@ -54,7 +54,12 @@ class DatabaseSeeder extends Seeder
         });
 
         $roleTemplates = [
-            'agency_owner' => array_keys($permissions),
+            'agency_owner' => [
+                'agency.manage_profile', 'agency.manage_members', 'property.create',
+                'property.publish', 'property.delete', 'lead.manage', 'analytics.view',
+                'billing.manage', 'integration.configure', 'audit.view', 'listing.view',
+                'listing.create', 'listing.update', 'listing.publish', 'listing.delete', 'media.manage',
+            ],
             'agency_manager' => [
                 'agency.manage_profile', 'agency.manage_members', 'property.create',
                 'property.publish', 'property.delete', 'lead.manage', 'analytics.view',

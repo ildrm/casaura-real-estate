@@ -72,6 +72,47 @@ Search spatial syntax is `bounds=min_longitude,min_latitude,max_longitude,max_la
 
 Future endpoint families follow resource boundaries: `/collections`, `/viewings`, `/leads`, `/conversations`, `/integrations`, `/admin`. Administrator APIs use explicit `/admin` routes and never share broad internal serializers with public APIs.
 
+## Phase 4 endpoint map
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/public/listings/{listing}/leads` | public, lead limiter, idempotency | Create the lead, initial conversation/message, notification, history, and audit receipt |
+| GET/PATCH | `/leads[/{lead}]` | tenant + `lead.manage` | Filter and operate the versioned tenant CRM pipeline |
+| GET/POST | `/conversations/{conversation}/messages` | participant or permitted agency member | Poll and append participant-scoped plain-text messages |
+| GET/POST/PATCH | `/viewings[/{viewing}]` | tenant + `lead.manage` | Schedule and transition timezone-aware viewings |
+| GET | `/viewings/{viewing}/calendar` | viewing participant | Export a confirmed viewing through the calendar port |
+| GET/POST/PATCH | `/reminders[/{reminder}]` | tenant + `lead.manage` | Manage assigned lead/viewing reminders |
+| GET/PATCH | `/notifications[/{notification}]` | user | List and read only the caller's in-app notifications |
+| GET | `/account/collaboration` | user | Consumer conversation and viewing projection |
+| GET | `/agency/analytics/collaboration` | tenant + `analytics.view` | Canonical first-response metrics |
+
+## Phase 5 endpoint map
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/public/agencies/{slug}` | public | Feature-gated safe storefront with team, hours, and published inventory |
+| GET/PUT | `/agency/opening-hours` | member / `agency.manage_profile` | Read or atomically replace weekly hours and closures |
+| GET/POST/PATCH | `/agency/team[/{member}]` | `agency.manage_members` | Quota-bound invite, activation, title, and safe agency-role assignment |
+| POST | `/public/agencies/{agency}/newsletter/subscriptions` | public, newsletter limiter | Idempotent consent capture with opaque unsubscribe token |
+| DELETE | `/public/newsletter/subscriptions/{token}` | public, newsletter limiter | Idempotent token-scoped unsubscribe |
+| GET/POST/PATCH | `/agency/newsletter/campaigns[/{campaign}]` | `agency.manage_profile` | Feature-gated draft campaign operations |
+| POST | `/agency/newsletter/campaigns/{campaign}/send` | `agency.manage_profile` | Deliver once through the newsletter adapter and record outcomes |
+| GET | `/agency/analytics` | `analytics.view` | Date-bounded storefront/listing/engagement/CRM/newsletter aggregates |
+
+## Phase 6 endpoint map
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/public/listings/{listing}/reports` | user, report limiter, idempotency | Create immutable abuse evidence and one moderation case |
+| GET/PATCH | `/admin/moderation-cases[/{case}]` | platform `comment.moderate` | Filter and operate the versioned moderation queue with report evidence and validated moderator assignment |
+| GET/PATCH | `/admin/settings[/{namespace}/{key}]` | platform `platform.settings` | Read redacted settings and update only non-secret values |
+| GET/PUT/DELETE | `/admin/feature-flags[...]` | platform `platform.settings` | Cursor-paginate flags and audit validity-windowed global/agency overrides |
+| GET/POST/PATCH/DELETE | `/admin/roles[/{role}]` | platform `platform.settings` | Inspect permissions and edit only safe non-system roles |
+| GET | `/admin/audit-logs` | platform `audit.view` | Cursor-paginate redacted immutable audit metadata |
+| GET | `/admin/health` | platform `audit.view` | Safe database, queue, failed-job, and search-backlog projection |
+
+Later endpoint families continue to follow resource boundaries: `/collections`, `/integrations`, provider operations, billing, and AI. Administrator APIs use explicit `/admin` routes and never share broad internal serializers with public APIs.
+
 ## Example error
 
 ```json
