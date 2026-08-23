@@ -21,6 +21,8 @@ class AgencyRegistrationTest extends TestCase
                 'password_confirmation' => 'SecurePass123!',
                 'agency_name' => 'Greenway Realty',
                 'timezone' => 'America/Los_Angeles',
+                'consent' => true,
+                'consent_version' => '2026-08-22',
             ]);
 
         $response->assertCreated()

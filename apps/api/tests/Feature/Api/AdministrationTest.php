@@ -29,11 +29,11 @@ class AdministrationTest extends TestCase
     public function test_platform_routes_reject_agency_roles_and_accept_platform_roles_without_tenant_header(): void
     {
         [$owner] = $this->createAgencyOwner();
-        Sanctum::actingAs($owner);
+        Sanctum::actingAs($owner, ['*', 'mfa']);
         $this->getJson('/api/v1/admin/settings')->assertForbidden();
 
         $admin = $this->createPlatformOperator('platform_administrator');
-        Sanctum::actingAs($admin);
+        Sanctum::actingAs($admin, ['*', 'mfa']);
         $this->getJson('/api/v1/admin/settings')->assertOk()->assertJsonStructure(['data']);
     }
 
@@ -53,7 +53,7 @@ class AdministrationTest extends TestCase
         $this->postJson('/api/v1/public/listings/00000000-0000-0000-0000-000000000000/reports', $payload, ['Idempotency-Key' => 'missing-report'])->assertNotFound();
 
         $moderator = $this->createPlatformOperator('moderator');
-        Sanctum::actingAs($moderator);
+        Sanctum::actingAs($moderator, ['*', 'mfa']);
         $caseId = $first->json('data.case_id');
         $this->getJson('/api/v1/admin/moderation-cases')->assertOk()
             ->assertJsonPath('data.0.report.details', $payload['details']);
@@ -78,7 +78,7 @@ class AdministrationTest extends TestCase
     {
         Setting::query()->create(['namespace' => 'integrations', 'key' => 'api_token', 'value' => 'super-secret', 'is_secret' => true]);
         $admin = $this->createPlatformOperator('platform_administrator');
-        Sanctum::actingAs($admin);
+        Sanctum::actingAs($admin, ['*', 'mfa']);
         $content = $this->getJson('/api/v1/admin/settings')->assertOk()->getContent();
         $this->assertStringNotContainsString('super-secret', $content);
         $this->patchJson('/api/v1/admin/settings/integrations/api_token', ['value' => 'changed', 'version' => 1])
@@ -96,7 +96,7 @@ class AdministrationTest extends TestCase
     {
         [, $agency] = $this->createAgencyOwner();
         $admin = $this->createPlatformOperator('platform_administrator');
-        Sanctum::actingAs($admin);
+        Sanctum::actingAs($admin, ['*', 'mfa']);
         $flagsPage = $this->getJson('/api/v1/admin/feature-flags?limit=1')->assertOk()->assertJsonCount(1, 'data');
         $this->assertNotNull($flagsPage->json('meta.next_cursor'));
         $flag = FeatureFlag::query()->where('key', 'newsletters')->firstOrFail();
@@ -122,7 +122,7 @@ class AdministrationTest extends TestCase
     public function test_rbac_editor_mutates_only_safe_custom_roles(): void
     {
         $admin = $this->createPlatformOperator('platform_administrator');
-        Sanctum::actingAs($admin);
+        Sanctum::actingAs($admin, ['*', 'mfa']);
         $rolesPage = $this->getJson('/api/v1/admin/roles?limit=1')->assertOk()->assertJsonCount(1, 'data.roles');
         $this->assertNotNull($rolesPage->json('meta.next_cursor'));
         $role = $this->postJson('/api/v1/admin/roles', [
@@ -145,7 +145,7 @@ class AdministrationTest extends TestCase
         $this->actAsAgencyOwner($owner);
         $this->patchJson('/api/v1/agency', ['short_description' => 'Updated agency summary.'], $this->agencyHeaders($agency))->assertOk();
         $admin = $this->createPlatformOperator('platform_administrator');
-        Sanctum::actingAs($admin);
+        Sanctum::actingAs($admin, ['*', 'mfa']);
         $audit = $this->getJson('/api/v1/admin/audit-logs?action=agency.profile_updated')->assertOk();
         $audit->assertJsonPath('data.0.action', 'agency.profile_updated');
         $this->assertStringNotContainsString('password', $audit->getContent());

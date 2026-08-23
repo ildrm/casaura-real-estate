@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import { apiMutation, type ApiError } from "@/lib/api-client";
 
 type PrincipalResponse = {
-  data: { memberships: Array<{ agency: { id: string } }> };
+  data: { email_verified_at: string | null; memberships: Array<{ agency: { id: string } }> };
 };
+
+const LEGAL_VERSION = process.env.NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION ?? "2026-08-22";
 
 export function AgencyRegistrationForm() {
   const router = useRouter();
@@ -34,10 +36,12 @@ export function AgencyRegistrationForm() {
         email: String(form.get("email") ?? ""),
         password: String(form.get("password") ?? ""),
         password_confirmation: String(form.get("password_confirmation") ?? ""),
+        consent: form.get("consent") === "on",
+        consent_version: LEGAL_VERSION,
       });
       const agencyId = response.data.memberships.at(0)?.agency.id;
       if (agencyId) window.localStorage.setItem("casaura.activeAgencyId", agencyId);
-      router.push("/agency/dashboard");
+      router.push(response.data.email_verified_at ? "/mfa/setup" : "/verify-email");
       router.refresh();
     } catch (caught) {
       setError(caught as ApiError);
@@ -80,8 +84,8 @@ export function AgencyRegistrationForm() {
           <input name="password_confirmation" type="password" minLength={12} autoComplete="new-password" required disabled={step !== 2} />
         </label>
         <label className="check-field consent-field">
-          <input type="checkbox" required disabled={step !== 2} />
-          <span>I agree to the Terms and acknowledge the Privacy Policy.</span>
+          <input name="consent" type="checkbox" required disabled={step !== 2} />
+          <span>I agree to the <Link href="/terms">Terms</Link> and acknowledge the <Link href="/privacy">Privacy Policy</Link>.</span>
         </label>
         <div className="registration-actions">
           <button className="button button--outline" type="button" onClick={() => setStep(1)}>Back</button>

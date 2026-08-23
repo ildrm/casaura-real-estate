@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\ApiException;
+use App\Domain\Newsletters\LocalNewsletterDelivery;
 use App\Domain\Newsletters\NewsletterDelivery;
 use App\Domain\Tenancy\AuditRecorder;
 use App\Domain\Tenancy\FeatureResolver;
@@ -63,6 +64,9 @@ class NewsletterCampaignController extends Controller
     public function send(Request $request, string $campaign, TenantContext $tenant, FeatureResolver $features, NewsletterDelivery $delivery, AuditRecorder $audit): JsonResponse
     {
         $this->ensureEnabled($tenant, $features);
+        if (app()->environment('production') && $delivery instanceof LocalNewsletterDelivery) {
+            throw new ApiException('DELIVERY_UNAVAILABLE', 'Newsletter delivery is not configured.', 503);
+        }
         $this->find($campaign, $tenant);
         DB::transaction(function () use ($request, $campaign, $tenant, $delivery, $audit): void {
             $current = DB::table('newsletter_campaigns')->where('agency_id', $tenant->id())

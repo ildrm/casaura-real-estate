@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/ui/icon";
 import { activeAgencyId, apiMutation, apiQuery, apiTextQuery, type ApiError } from "@/lib/api-client";
+import { formatDate as localizedDate } from "@/lib/localization";
 import type { CollaborationAnalytics, Lead, LeadStatus, Message, Reminder, UserNotification, Viewing } from "@/lib/operations-types";
 
 type WorkspaceData = {
@@ -234,6 +235,6 @@ function mergeMessages(current: Message[], incoming: Message[]): Message[] {
 }
 
 function titleCase(value: string): string { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function formatDate(value: string): string { return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function formatDate(value: string): string { return localizedDate(value, { dateStyle: "medium", timeStyle: "short" }); }
 function relativeTime(value: string): string { const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60_000)); return minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : formatDate(value); }
 function formatDuration(seconds: number | null): string { if (seconds === null) return "—"; if (seconds < 60) return `${seconds}s`; if (seconds < 3600) return `${Math.round(seconds / 60)}m`; return `${(seconds / 3600).toFixed(1)}h`; }

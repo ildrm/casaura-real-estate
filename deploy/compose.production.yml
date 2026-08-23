@@ -1,0 +1,186 @@
+name: casaura-production
+
+x-api-environment: &api-environment
+  APP_NAME: Casaura
+  APP_ENV: production
+  APP_DEBUG: "false"
+  APP_KEY: ${APP_KEY:?inject APP_KEY from the secret manager}
+  APP_URL: ${APP_URL:?set the public API URL}
+  FRONTEND_URL: ${FRONTEND_URL:?set the public web URL}
+  RELEASE_ID: ${RELEASE_ID:?set the immutable release identifier}
+  PRODUCTION_GUARD_ENABLED: "true"
+  LOG_CHANNEL: stderr
+  LOG_LEVEL: info
+  DB_CONNECTION: pgsql
+  DB_HOST: ${DB_HOST:?set managed PostgreSQL host}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_DATABASE: ${DB_DATABASE:?set database name}
+  DB_USERNAME: ${DB_USERNAME:?inject database user}
+  DB_PASSWORD: ${DB_PASSWORD:?inject database password}
+  DB_SSLMODE: require
+  REDIS_CLIENT: phpredis
+  REDIS_URL: ${REDIS_URL:?inject authenticated TLS Redis URL}
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  SESSION_ENCRYPT: "true"
+  SESSION_SECURE_COOKIE: "true"
+  SESSION_HTTP_ONLY: "true"
+  SESSION_SAME_SITE: lax
+  SESSION_DOMAIN: ${SESSION_DOMAIN:?set the session cookie domain}
+  SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:?set exact first-party web hosts}
+  LISTING_MEDIA_DISK: s3
+  PRIVACY_EXPORT_DISK: s3
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:?set object storage region}
+  AWS_BUCKET: ${AWS_BUCKET:?set private media bucket}
+  AWS_ENDPOINT: ${AWS_ENDPOINT:-}
+  AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-false}
+  MEDIA_SCANNER: clamav
+  CLAMAV_ADDRESS: tcp://clamav:3310
+  MEDIA_QUARANTINE_RETENTION_DAYS: ${MEDIA_QUARANTINE_RETENTION_DAYS:-30}
+  SEARCH_DRIVER: ${SEARCH_DRIVER:-database}
+  SEARCH_ALLOW_DESTRUCTIVE_RESET: "false"
+  RESO_PAGE_SIZE: ${RESO_PAGE_SIZE:-200}
+  RESO_TIMEOUT_SECONDS: ${RESO_TIMEOUT_SECONDS:-15}
+  RESO_RAW_PAYLOAD_RETENTION_DAYS: ${RESO_RAW_PAYLOAD_RETENTION_DAYS:-30}
+  RESO_APPROVED_ORIGINS: ${RESO_APPROVED_ORIGINS:?set comma-separated licensed RESO API and token hosts}
+  RESO_SECRET_DIRECTORY: ${RESO_SECRET_DIRECTORY:-/run/secrets/reso}
+  AI_DRIVER: openai
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:?inject the OpenAI key from the secret manager}
+  OPENAI_BASE_URL: https://api.openai.com
+  AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-15}
+  AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-800}
+  AI_CONTENT_RETENTION_DAYS: ${AI_CONTENT_RETENTION_DAYS:-30}
+  BILLING_DRIVER: stripe
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?inject the Stripe secret key}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?inject the Stripe endpoint secret}
+  STRIPE_API_URL: https://api.stripe.com
+  STRIPE_API_VERSION: ${STRIPE_API_VERSION:-2025-07-30.basil}
+  STRIPE_PROFESSIONAL_PRICE_ID: ${STRIPE_PROFESSIONAL_PRICE_ID:?set the approved Professional recurring Price ID}
+  STRIPE_WEBHOOK_TOLERANCE_SECONDS: ${STRIPE_WEBHOOK_TOLERANCE_SECONDS:-300}
+  BILLING_CHECKOUT_SUCCESS_URL: ${BILLING_CHECKOUT_SUCCESS_URL:?set an approved frontend success URL}
+  BILLING_CHECKOUT_CANCEL_URL: ${BILLING_CHECKOUT_CANCEL_URL:?set an approved frontend cancellation URL}
+  BILLING_PORTAL_RETURN_URL: ${BILLING_PORTAL_RETURN_URL:?set an approved frontend portal return URL}
+  FEATURE_FORCE_OFF: ${FEATURE_FORCE_OFF:-mls,ai_search,ai_listing_writer,payments,sponsored_listings}
+  MAIL_MAILER: ${MAIL_MAILER:?set a production mail transport}
+  MAIL_HOST: ${MAIL_HOST:-}
+  MAIL_PORT: ${MAIL_PORT:-587}
+  MAIL_USERNAME: ${MAIL_USERNAME:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?set a verified sender}
+  MAIL_FROM_NAME: Casaura
+  LEGAL_DOCUMENT_VERSION: ${LEGAL_DOCUMENT_VERSION:?set the approved legal version}
+  LEGAL_DOCUMENT_TEXT: ${LEGAL_DOCUMENT_TEXT:?set approved consent text}
+  INQUIRY_CONSENT_VERSION: ${INQUIRY_CONSENT_VERSION:?set the approved inquiry consent version}
+  INQUIRY_CONSENT_TEXT: ${INQUIRY_CONSENT_TEXT:?set the approved inquiry consent text}
+  OPERATIONS_REQUIRE_WORKER_HEARTBEAT: "true"
+  OPERATIONS_REQUIRE_SCHEDULER_HEARTBEAT: "true"
+
+services:
+  api:
+    image: ${CASAURA_API_IMAGE:?use an immutable API image digest}
+    environment: *api-environment
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /app/storage/framework:size=128m,uid=10001,gid=10001
+      - /app/bootstrap/cache:size=16m,uid=10001,gid=10001
+    volumes:
+      - type: bind
+        source: ${RESO_SECRET_HOST_DIRECTORY:?mount the secret-manager materialized RESO secret directory}
+        target: ${RESO_SECRET_DIRECTORY:-/run/secrets/reso}
+        read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "php-fpm", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  api-web:
+    image: ${CASAURA_API_NGINX_IMAGE:?use an immutable API gateway image digest}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    user: "101:101"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,uid=101,gid=101
+      - /var/run:size=4m,uid=101,gid=101
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  worker:
+    image: ${CASAURA_API_IMAGE:?use an immutable API image digest}
+    command: ["php", "artisan", "queue:work", "redis", "--queue=default,integrations", "--sleep=1", "--tries=3", "--timeout=120", "--max-time=3600"]
+    environment: *api-environment
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /app/storage/framework:size=128m,uid=10001,gid=10001
+      - /app/bootstrap/cache:size=16m,uid=10001,gid=10001
+    volumes:
+      - type: bind
+        source: ${RESO_SECRET_HOST_DIRECTORY:?mount the secret-manager materialized RESO secret directory}
+        target: ${RESO_SECRET_DIRECTORY:-/run/secrets/reso}
+        read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    stop_grace_period: 100s
+
+  scheduler:
+    image: ${CASAURA_API_IMAGE:?use an immutable API image digest}
+    command: ["php", "artisan", "schedule:work"]
+    environment: *api-environment
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/storage/framework:size=64m,uid=10001,gid=10001
+      - /app/bootstrap/cache:size=16m,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  web:
+    image: ${CASAURA_WEB_IMAGE:?use an immutable web image digest}
+    environment:
+      NODE_ENV: production
+      RELEASE_ID: ${RELEASE_ID:?set the immutable release identifier}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  clamav:
+    image: clamav/clamav:1.4.3@sha256:75fb5fd95fcbe1d7e6d240c369c1572b686ee2c95949d1042b5148de8eddebb4
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,uid=100,gid=101
+      - /run/clamav:size=16m,uid=100,gid=101
+    volumes:
+      - clamav_signatures:/var/lib/clamav
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+volumes:
+  clamav_signatures:

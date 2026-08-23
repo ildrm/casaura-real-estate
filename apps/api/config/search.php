@@ -10,4 +10,5 @@ return [
         'timeout' => (int) env('OPENSEARCH_TIMEOUT', 3),
     ],
     'max_radius_km' => (float) env('SEARCH_MAX_RADIUS_KM', 200),
+    'allow_destructive_reset' => (bool) env('SEARCH_ALLOW_DESTRUCTIVE_RESET', false),
 ];

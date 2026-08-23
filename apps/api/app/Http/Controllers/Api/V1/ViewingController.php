@@ -7,8 +7,11 @@ use App\Domain\ApiException;
 use App\Domain\Calendar\CalendarExporter;
 use App\Domain\Notifications\NotificationDispatcher;
 use App\Domain\Tenancy\AuditRecorder;
+use App\Domain\Tenancy\FeatureResolver;
 use App\Domain\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
+use App\Models\AgencyMember;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,8 +22,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ViewingController extends Controller
 {
+    public function __construct(private readonly FeatureResolver $features) {}
+
     public function index(Request $request, TenantContext $tenant): JsonResponse
     {
+        $this->features->ensureEnabled('viewings', $tenant->agency());
         $validated = $request->validate([
             'limit' => ['nullable', 'integer', 'min:1', 'max:50'],
             'cursor' => ['nullable', 'string'],
@@ -41,6 +47,7 @@ class ViewingController extends Controller
         AuditRecorder $audit,
         AnalyticsRecorder $analytics,
     ): JsonResponse {
+        $this->features->ensureEnabled('viewings', $tenant->agency());
         $validated = $request->validate([
             'lead_id' => ['required', 'uuid'],
             'starts_at' => ['required', 'date', 'after:now'],
@@ -88,6 +95,7 @@ class ViewingController extends Controller
         AuditRecorder $audit,
         AnalyticsRecorder $analytics,
     ): JsonResponse {
+        $this->features->ensureEnabled('viewings', $tenant->agency());
         $validated = $request->validate([
             'version' => ['required', 'integer', 'min:1'],
             'status' => ['sometimes', Rule::in(['requested', 'confirmed', 'completed', 'cancelled', 'no_show'])],
@@ -166,11 +174,13 @@ class ViewingController extends Controller
     {
         $record = DB::table('viewing_requests')->where('id', $viewing)->firstOrFail();
         $consumer = $record->consumer_user_id === $request->user()->id;
-        $agency = DB::table('agency_members')->where('agency_id', $record->agency_id)->where('user_id', $request->user()->id)
-            ->where('status', 'active')->exists();
-        if (! $consumer && ! $agency) {
+        $agencyMember = AgencyMember::query()->where('agency_id', $record->agency_id)
+            ->where('user_id', $request->user()->id)->where('status', 'active')->first();
+        $agencyAuthorized = $agencyMember?->hasPermission('lead.manage') ?? false;
+        if (! $consumer && ! $agencyAuthorized) {
             abort(404);
         }
+        $this->features->ensureEnabled('viewings', Agency::query()->findOrFail($record->agency_id));
         if ($record->status !== 'confirmed') {
             throw new ApiException('VIEWING_NOT_EXPORTABLE', 'Only confirmed viewings can be exported.', 409);
         }

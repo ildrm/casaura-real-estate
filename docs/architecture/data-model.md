@@ -26,6 +26,16 @@ erDiagram
   USERS ||--o{ PROPERTY_REACTIONS : reacts
   LISTINGS ||--o{ PROPERTY_REACTIONS : receives
   LISTINGS ||--o{ DATA_SOURCE_RECORDS : sourced_from
+  PROVIDER_CONNECTIONS ||--o{ DATA_SOURCE_RECORDS : imports
+  PROVIDER_CONNECTIONS ||--o{ SYNC_JOBS : schedules
+  USERS ||--o{ COLLECTIONS : owns
+  COLLECTIONS ||--o{ COLLECTION_PROPERTIES : orders
+  LISTINGS ||--o{ COLLECTION_PROPERTIES : saved_in
+  AI_SESSIONS ||--o{ AI_GENERATIONS : contains
+  AI_GENERATIONS ||--o{ AI_CITATIONS : grounded_by
+  AGENCIES ||--o{ BILLING_CUSTOMERS : bills
+  AGENCIES ||--o{ PROMOTION_CAMPAIGNS : sponsors
+  PROMOTION_POLICIES ||--o{ PROMOTION_CAMPAIGNS : governs
   AGENCIES ||--o{ LEADS : receives
   LISTINGS ||--o{ LEADS : generates
   LEADS ||--o{ VIEWING_REQUESTS : schedules
@@ -41,10 +51,10 @@ erDiagram
 
 | Table | Important fields and constraints |
 | --- | --- |
-| `users` | UUID PK; unique case-normalized email; verified/suspended timestamps; locale/timezone; encrypted/hashed credentials |
+| `users` | UUID PK; unique case-normalized email; verified/suspended timestamps; locale/timezone; credential security version; encrypted MFA secret/recovery codes; hashed password |
 | `agencies` | UUID PK; unique slug; legal/profile fields; verification/status enums; owner user FK; timezone; soft delete only for business recovery |
 | `agency_branches` | UUID PK; `agency_id`; slug unique per agency; address/location placeholders; `is_primary` |
-| `agency_members` | UUID PK; unique `(agency_id,user_id)`; status; job title; invited/accepted timestamps |
+| `agency_members` | UUID PK; unique `(agency_id,user_id)`; status; job title; invited/accepted timestamps; inviter; hashed single-use invitation token; expiry/cancellation; public-profile opt-in |
 | `roles` | UUID PK; optional `agency_id`; system roles immutable; unique scoped slug |
 | `permissions` | UUID PK; unique machine name such as `agency.manage_members` |
 | `role_permissions` | composite unique role/permission FKs |
@@ -56,6 +66,7 @@ erDiagram
 | `feature_flag_overrides` | unique `(feature_flag_id, scope_type, scope_id)`; nullable boolean/value; validity window |
 | `audit_logs` | append-only UUID PK; actor, agency, action, entity, before/after JSON, IP, request ID, timestamp |
 | `personal_access_tokens` | Sanctum token hashes and abilities; never store plaintext tokens |
+| `consent_records` | Immutable user/agency purpose, legal version/text/hash, source, consent timestamp, and additive revocation evidence |
 
 ## Phase 2 physical tables
 
@@ -92,7 +103,7 @@ erDiagram
 
 | Table | Important fields and constraints |
 | --- | --- |
-| `leads` | Agency/listing/consumer/assignee ownership; idempotency key and payload hash; validated contact; status, priority, optimistic version, response timestamps; tenant pipeline index |
+| `leads` | Agency/listing/consumer/assignee ownership; idempotency key and payload hash; validated contact; inquiry consent version/text/hash/time; status, priority, optimistic version, response timestamps; tenant pipeline index |
 | `lead_status_history` | Append-only from/to status and assignee, actor, note, and timestamp |
 | `conversations` | One agency-owned conversation per lead with listing subject and last-message cursor timestamp |
 | `conversation_participants` | Unique conversation/user role; participant scope is authoritative for consumer access |
@@ -113,6 +124,12 @@ erDiagram
 | `newsletter_events` | Unique campaign/subscriber delivery outcome and adapter name; append-only |
 | `analytics_events` | Privacy-safe agency/listing event type, hourly anonymous-session hash for public-view deduplication, allowlisted metadata, and occurrence timestamp |
 
+## Production hardening tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `data_subject_requests` | Subject/requester, export or deletion type, controlled status, opaque operator approval reference, encrypted-object key/checksum, failure code, completion and expiry timestamps |
+
 ## Phase 6 physical tables and extensions
 
 | Table or extension | Important fields and constraints |
@@ -122,18 +139,64 @@ erDiagram
 | `moderation_case_history` | Append-only actor/assignee/status/outcome evidence |
 | `settings.version` | Optimistic version for non-secret platform setting updates; secret values remain externally managed |
 
-## Planned marketplace tables
+## Phase 7 physical tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `real_estate_data_providers` | Stable adapter/protocol key, active state, and declared capabilities |
+| `provider_connections` | Tenant/provider ownership; RESO base/token URLs; client ID plus named secret reference; resource, rights, Data Dictionary, lifecycle, and optimistic version state |
+| `field_mappings` | Unique connection/resource/version mapping JSON with actor and activation evidence |
+| `sync_jobs` | Connection-scoped idempotency and payload hash; full/incremental mode, committed cursors, counts, failure code, and lifecycle timestamps |
+| `data_source_records` | Immutable connection/resource/external ID/payload-hash identity; optional canonical property/listing; mapping/rights snapshot, provider timestamp, outcome, and diagnostic envelope |
+| `import_errors` | Sync/source association, stable validation code/field, retryability, redacted detail, and resolution evidence |
+| `duplicate_candidates` | Tenant/source/canonical candidate, bounded score/reasons, optimistic decision state, actor, and reversible merge snapshot |
+
+## Phase 8 physical tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `collections` | User ownership, version, timestamps, and recoverable soft delete |
+| `collection_members` | Unique collection/user role with acceptance and revocation evidence |
+| `collection_invitations` | Hashed invited email and single-use token, role, expiry, acceptance, and revocation |
+| `collection_properties` | Unique collection/listing and collection/position constraints with adding actor |
+| `comparison_histories` | Private user, ordered listing IDs, and unique content fingerprint for idempotency |
+| `market_aggregate_cache` | Hashed cohort key, explicit cohort size, aggregate JSON, calculation time, and expiry; cohorts below the privacy threshold are never returned |
+
+## Phase 9 physical tables
+
+| Table | Important fields and constraints |
+| --- | --- |
+| `ai_sessions` / `ai_messages` | User/purpose lifecycle, expiry, role, optional redacted content, and immutable content hash |
+| `ai_generations` | Optional session/tenant/listing, adapter/model/purpose/status, prompt hash, constrained filters/output, token/latency telemetry, safety code, and expiry |
+| `ai_citations` | Generation/source identity, allowlisted field paths, and grounded snapshot hash |
+| `ai_listing_suggestions` | Tenant/listing/generation, source listing version, suggested/applied field sets, human actor, and apply timestamp |
+| `ai_safety_events` | Redacted category/action/rule version and immutable occurrence time; no raw prompt or contact data |
+
+## Phase 10 physical tables and extensions
+
+| Table or extension | Important fields and constraints |
+| --- | --- |
+| `plans.provider_price_id` | Optional unique Stripe price identity; no secret material |
+| `subscriptions` provider fields | Stripe customer/subscription identity plus monotonic provider timestamp and cancellation lifecycle |
+| `billing_customers` | Unique tenant/provider and provider/customer relationships with version |
+| `billing_checkout_sessions` | Tenant/plan/actor, idempotency and payload hash, unique provider session, hosted URL, status, and expiry |
+| `billing_events` | Unique provider event, provider time, payload hash, safe object/customer identifiers and summary, resolution status/failure; raw webhook payload is not retained |
+| `invoices` | Tenant/subscription/provider identity, minor-unit subtotal/tax/total, ISO currency, period, provider timestamp, and provider-hosted document URLs |
+| `promotion_policies` | Immutable family/version, placement/label/disclosure, eligible plans, window, cap, lifecycle, and actor |
+| `promotion_campaigns` | Tenant/listing/policy, duplicated controlled placement, schedule, cap/count, lifecycle, and optimistic version |
+| `promotion_impressions` | Campaign, placement, hour-bucketed HMAC visitor dedupe hash, and occurrence time with a replay-preventing unique constraint |
+
+## Remaining optional marketplace extensions
 
 The following are designed now and delivered by vertical slice, not as empty speculative migrations:
 
 - Catalogue extensions: `listing_sources`, `rooms`, `developments`, `buildings`, `units`.
 - Geography: `locations`, `geographic_boundaries`, parcel/cadastral provider references.
 - Media extensions: `floor_plans`, `property_documents`, `upload_sessions`, `storage_migrations`.
-- Discovery/engagement: `collections`, `collection_members`, `collection_properties`, `property_comments`, `property_ratings`, `saved_searches`, `search_alerts`, `search_demand_events`.
+- Discovery/engagement: `property_comments`, `property_ratings`, `saved_searches`, `search_alerts`, `search_demand_events`.
 - CRM/collaboration extensions: `open_houses` and provider-specific delivery receipts.
 - Agency growth extensions: `agency_verifications`, dedicated agent profiles, and external campaign-provider state.
-- Integrations: `real_estate_data_providers`, `provider_connections`, `data_source_records`, `field_mappings`, `sync_jobs`, `import_errors`, `duplicate_candidates`.
-- Trust/admin extensions: `cms_entries`, sanctions/appeals, and `invoices`.
+- Trust/admin extensions: `cms_entries` and sanctions/appeals.
 
 ## Index strategy
 
@@ -166,10 +229,10 @@ PostgreSQL RLS can add a second barrier using a transaction-local `app.agency_id
 | --- | --- |
 | Audit/security events | 7 years or jurisdiction policy; append-only; tightly restricted |
 | Raw provider payloads | Provider contract maximum; hash/metadata may outlive payload for traceability |
-| Search analytics | Pseudonymize quickly; aggregate after 90 days; delete raw identifiers by policy |
+| Search analytics | Remove anonymous identifiers after 7 days and delete raw events after 90 days by scheduled policy |
 | Conversations/leads | Agency-configurable within legal minima/maxima; delete or anonymize on closure |
-| Media | Quarantine on delete; purge originals/derivatives after recovery window unless legal hold |
-| Account data | Export then delete/anonymize workflow; preserve only lawful financial/security records |
+| Media | Quarantine on delete; purge originals/derivatives after 30 days unless legal hold; reconcile referenced objects daily |
+| Account data | Encrypted export expires after 7 days; reviewed deletion revokes credentials and anonymizes direct personal data while preserving restricted lawful evidence |
 | Backups | Encrypted rolling retention with deletion propagation schedule and tested restore |
 
 ## Provenance model

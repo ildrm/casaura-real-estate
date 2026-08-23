@@ -30,7 +30,11 @@ class PublicStorefrontController extends Controller
             ]);
         $team = DB::table('agency_members')->join('users', 'users.id', '=', 'agency_members.user_id')
             ->where('agency_members.agency_id', $record->id)->where('agency_members.status', 'active')
-            ->orderBy('users.name')->get(['agency_members.id', 'agency_members.job_title', 'users.name'])
+            ->where('agency_members.is_public', true)
+            ->orderByRaw('CASE WHEN agency_members.public_position IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('agency_members.public_position')->orderBy('agency_members.created_at')
+            ->orderBy('agency_members.id')
+            ->get(['agency_members.id', 'agency_members.job_title', 'users.name'])
             ->map(fn (object $member) => ['id' => $member->id, 'name' => $member->name, 'job_title' => $member->job_title]);
         $listings = SearchDocument::query()->where('agency_id', $record->id)->where('status', 'published')
             ->orderByDesc('listed_at')->limit(50)->get()->map(fn (SearchDocument $document) => $presenter->card($document));

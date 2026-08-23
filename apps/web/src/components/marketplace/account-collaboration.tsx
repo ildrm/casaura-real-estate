@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/ui/icon";
 import { apiMutation, apiQuery, apiTextQuery, type ApiError } from "@/lib/api-client";
+import { formatDate as localizedDate } from "@/lib/localization";
 import type { AccountCollaboration as AccountCollaborationData, Message } from "@/lib/operations-types";
 
 export function AccountCollaboration() {
@@ -114,5 +115,5 @@ function mergeMessages(current: Message[], incoming: Message[]): Message[] {
 }
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return localizedDate(value, { dateStyle: "medium", timeStyle: "short" });
 }

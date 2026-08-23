@@ -6,6 +6,7 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { Icon } from "@/components/ui/icon";
 import { getMarketplacePreview } from "@/lib/marketplace-data";
+import { publicConfig } from "@/lib/public-config";
 
 const locations = [
   { name: "Austin, TX", count: "1,842 homes", image: "/images/properties/oakridge-kitchen.png" },
@@ -13,6 +14,7 @@ const locations = [
   { name: "Nashville, TN", count: "987 homes", image: "/images/properties/maple-townhouse.png" },
   { name: "Santa Monica, CA", count: "743 homes", image: "/images/properties/ocean-apartment.png" },
 ];
+const demoDataEnabled = process.env.NODE_ENV === "development" || publicConfig.demoData;
 
 export default async function Home() {
   const { listings, agencies } = await getMarketplacePreview();
@@ -63,7 +65,7 @@ export default async function Home() {
           )}
         </section>
 
-        <section className="section shell section--divided" aria-labelledby="places-title">
+        {demoDataEnabled ? <section className="section shell section--divided" aria-labelledby="places-title">
           <div className="section-heading">
             <h2 id="places-title">Explore by place</h2>
             <Link href="/search">Browse all places <Icon name="arrow-right" /></Link>
@@ -76,7 +78,7 @@ export default async function Home() {
               </Link>
             ))}
           </div>
-        </section>
+        </section> : null}
 
         <section className="section shell section--divided" id="agencies" aria-labelledby="agencies-title">
           <div className="section-heading">
@@ -102,7 +104,7 @@ export default async function Home() {
           )}
         </section>
 
-        <section className="section shell section--divided market" id="market-insights" aria-labelledby="market-title">
+        {demoDataEnabled ? <section className="section shell section--divided market" id="market-insights" aria-labelledby="market-title">
           <div className="section-heading">
             <h2 id="market-title">A clearer view of the market</h2>
             <Link href="/search?q=Austin%2C+TX"><Icon name="map-pin" /> Austin, TX</Link>
@@ -125,7 +127,7 @@ export default async function Home() {
             </div>
           </div>
           <p className="methodology">Development preview data. Production reports require a configured licensed data source and will display period and methodology.</p>
-        </section>
+        </section> : null}
 
         <section className="agency-cta shell" aria-labelledby="agency-cta-title">
           <div className="agency-cta__copy">

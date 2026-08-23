@@ -4,8 +4,11 @@ use App\Domain\ApiException;
 use App\Domain\Listings\ListingException;
 use App\Domain\Search\SearchException;
 use App\Http\Middleware\AddRequestId;
+use App\Http\Middleware\EnsureActivePrincipal;
 use App\Http\Middleware\EnsurePermission;
 use App\Http\Middleware\EnsurePlatformPermission;
+use App\Http\Middleware\EnsureRequiredMfa;
+use App\Http\Middleware\EnsureVerifiedIdentity;
 use App\Http\Middleware\ResolveAgencyTenant;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -22,10 +25,14 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withCommands()
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->append(AddRequestId::class);
         $middleware->alias([
+            'active_principal' => EnsureActivePrincipal::class,
+            'verified_identity' => EnsureVerifiedIdentity::class,
+            'required_mfa' => EnsureRequiredMfa::class,
             'tenant' => ResolveAgencyTenant::class,
             'permission' => EnsurePermission::class,
             'platform_permission' => EnsurePlatformPermission::class,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { PublicPropertyCard } from "@/components/marketplace/public-property-card";
+import { SponsoredListings } from "@/components/marketplace/sponsored-listings";
 import { Icon } from "@/components/ui/icon";
 import type { PublicListingCard, PublicSearchResponse } from "@/lib/public-marketplace-types";
 
@@ -40,6 +41,7 @@ export function MarketplaceSearch({ response, params, error }: { response: Publi
     <div className={`marketplace-split marketplace-split--${mode}`}>
       <section className="marketplace-results" aria-labelledby="public-results-title">
         <header><div><h1 id="public-results-title">{query ? `Homes near “${query}”` : "Homes for you"}</h1><p>{response?.meta.count ?? 0} published {(response?.meta.count ?? 0) === 1 ? "result" : "results"}</p></div><label>Sort<select name="sort" defaultValue={params.sort ?? "newest"} onChange={(event) => { const next = new URLSearchParams(params); next.set("sort", event.target.value); router.push(`/search?${next}`); }}><option value="newest">Newest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></select></label></header>
+        <SponsoredListings placement="search" />
         {error ? <div className="marketplace-state" role="alert"><Icon name="shield" /><h2>Search is temporarily unavailable</h2><p>{error}</p><button className="button button--outline" type="button" onClick={() => router.refresh()}>Try again</button></div> : null}
         {!error && response?.data.length === 0 ? <div className="marketplace-state"><Icon name="search" /><h2>No matching homes yet</h2><p>Try a wider location or fewer filters. We never pad results with unrelated inventory.</p><Link className="button button--outline" href="/search">Clear filters</Link></div> : null}
         {!error && response?.data.length ? <div className="marketplace-card-grid">{response.data.map((listing) => <PublicPropertyCard key={listing.id} listing={listing} selected={selected?.id === listing.id} onSelect={setSelected} />)}</div> : null}

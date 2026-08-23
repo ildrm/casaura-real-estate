@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import { activeAgencyId, apiQuery, type ApiError } from "@/lib/api-client";
 import type { ListingProjection } from "@/lib/listing-types";
+import { formatDate, formatMoney } from "@/lib/localization";
 
 type ListingPage = { data: ListingProjection[]; meta?: { next_cursor?: string | null } };
 
@@ -18,11 +19,7 @@ const statusLabels: Record<ListingProjection["status"], string> = {
 
 function money(listing: ListingProjection): string {
   if (!listing.price) return "Not set";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: listing.price.currency,
-    maximumFractionDigits: 0,
-  }).format(listing.price.amount_minor / 100);
+  return formatMoney(listing.price.amount_minor, listing.price.currency);
 }
 
 function listingAddress(listing: ListingProjection): string {
@@ -150,8 +147,8 @@ export function ListingsWorkspace() {
               <span>{listing.reference}</span><span>{money(listing)}</span>
               <span><em className={`listing-status listing-status--${listing.status}`}>{statusLabels[listing.status]}</em></span>
               <span className="quality-cell"><b>{listing.quality.score}%</b><i><span style={{ width: `${listing.quality.score}%` }} /></i></span>
-              <span>{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(listing.updated_at))}</span>
-              <span><Link className="inventory-edit" href={`/agency/properties/${listing.id}/edit`} aria-label={`Edit ${listing.title || listing.reference}`}>Edit</Link></span>
+              <span>{formatDate(listing.updated_at, { month: "short", day: "numeric" })}</span>
+              <span className="inventory-row-actions"><Link className="inventory-edit" href={`/agency/properties/${listing.id}/edit`} aria-label={`Edit ${listing.title || listing.reference}`}>Edit</Link><Link className="inventory-edit" href={`/agency/properties/${listing.id}/assistant`} aria-label={`Open AI writer for ${listing.title || listing.reference}`}>AI writer</Link></span>
             </div>)}
           </div> : null}
           {filtered.length ? <footer className="inventory-footer"><span>Showing {filtered.length} loaded {filtered.length === 1 ? "property" : "properties"}</span>{nextCursor ? <button className="button button--outline" type="button" disabled={loading} onClick={() => void load(nextCursor)}>{loading ? "Loading…" : "Load more"}</button> : <span>All loaded</span>}</footer> : null}

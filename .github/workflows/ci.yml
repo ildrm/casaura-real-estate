@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+      - run: npm run lint:web
+      - run: npm run typecheck:web
+      - run: npm run build:web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.casaura.example
+          NEXT_PUBLIC_SITE_URL: https://casaura.example
+          NEXT_PUBLIC_APP_LOCALE: en-US
+          NEXT_PUBLIC_DEFAULT_CURRENCY: USD
+          NEXT_PUBLIC_AREA_UNIT: sq_ft
+          NEXT_PUBLIC_COUNTRY_CODE: US
+          NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION: ci
+          NEXT_PUBLIC_OPERATOR_NAME: Casaura CI Operator
+          NEXT_PUBLIC_OPERATOR_JURISDICTION: CI
+          NEXT_PUBLIC_OPERATOR_ADDRESS: 1 CI Way
+          NEXT_PUBLIC_SUPPORT_EMAIL: support@casaura.example
+          NEXT_PUBLIC_ENABLE_DEMO_DATA: "false"
+
+  api:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5-alpine
+        env:
+          POSTGRES_DB: casaura_test
+          POSTGRES_USER: casaura
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U casaura -d casaura_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: critical
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: casaura_test
+      DB_USERNAME: casaura
+      DB_PASSWORD: ci-only-password
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: gd, intl, mbstring, pcntl, pdo_pgsql, redis, zip
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: composer validate --strict
+      - run: composer audit --locked
+      - run: ./vendor/bin/pint --test
+      - run: php artisan migrate:fresh --seed --force
+      - run: php artisan test
+
+  e2e:
+    needs: [web, api]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      APP_DEBUG: "false"
+      APP_URL: http://127.0.0.1:8000
+      FRONTEND_URL: http://127.0.0.1:3100
+      SANCTUM_STATEFUL_DOMAINS: 127.0.0.1:3100
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ${{ github.workspace }}/apps/api/database/e2e.sqlite
+      CACHE_STORE: array
+      SESSION_DRIVER: database
+      SESSION_SECURE_COOKIE: "false"
+      SESSION_SAME_SITE: lax
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: critical
+      MEDIA_SCANNER: signature
+      LEGAL_DOCUMENT_VERSION: "2026-08-22"
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+      PLAYWRIGHT_API_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3100
+      NEXT_PUBLIC_APP_LOCALE: en-US
+      NEXT_PUBLIC_DEFAULT_CURRENCY: USD
+      NEXT_PUBLIC_AREA_UNIT: sq_ft
+      NEXT_PUBLIC_COUNTRY_CODE: US
+      NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION: "2026-08-22"
+      NEXT_PUBLIC_OPERATOR_NAME: Casaura CI Operator
+      NEXT_PUBLIC_OPERATOR_JURISDICTION: CI
+      NEXT_PUBLIC_OPERATOR_ADDRESS: 1 CI Way
+      NEXT_PUBLIC_SUPPORT_EMAIL: support@casaura.example
+      NEXT_PUBLIC_ENABLE_DEMO_DATA: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: gd, intl, mbstring, pcntl, pdo_sqlite, zip
+          coverage: none
+      - run: npm ci --ignore-scripts
+      - run: composer install --no-interaction --prefer-dist --no-progress
+        working-directory: apps/api
+      - run: npx playwright install --with-deps chromium
+      - run: touch apps/api/database/e2e.sqlite
+      - run: php artisan migrate:fresh --seed --force
+        working-directory: apps/api
+      - name: Run browser release matrix
+        shell: bash
+        run: |
+          php apps/api/artisan serve --host=127.0.0.1 --port=8000 > /tmp/casaura-api.log 2>&1 &
+          api_pid=$!
+          npm --workspace apps/web run dev -- --hostname 127.0.0.1 --port 3100 > /tmp/casaura-web.log 2>&1 &
+          web_pid=$!
+          cleanup() { kill "$api_pid" "$web_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/api/v1/health/live >/dev/null && curl --fail --silent http://127.0.0.1:3100/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              cat /tmp/casaura-api.log
+              cat /tmp/casaura-web.log
+              exit 1
+            fi
+            sleep 1
+          done
+          if ! npm run test:e2e; then
+            cat /tmp/casaura-api.log
+            cat /tmp/casaura-web.log
+            exit 1
+          fi
+
+  contract-and-secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: ./scripts/check-secrets.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx --yes @redocly/cli@1.34.5 lint packages/contracts/openapi.yaml
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/api/Dockerfile
+          push: false
+          tags: casaura-api:ci
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/api-nginx/Dockerfile
+          push: false
+          tags: casaura-api-nginx:ci
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/web/Dockerfile
+          push: false
+          tags: casaura-web:ci
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.casaura.example
+            NEXT_PUBLIC_SITE_URL=https://casaura.example
+            NEXT_PUBLIC_APP_LOCALE=en-US
+            NEXT_PUBLIC_DEFAULT_CURRENCY=USD
+            NEXT_PUBLIC_AREA_UNIT=sq_ft
+            NEXT_PUBLIC_COUNTRY_CODE=US
+            NEXT_PUBLIC_LEGAL_DOCUMENT_VERSION=ci
+            NEXT_PUBLIC_OPERATOR_NAME=Casaura CI Operator
+            NEXT_PUBLIC_OPERATOR_JURISDICTION=CI
+            NEXT_PUBLIC_OPERATOR_ADDRESS=1 CI Way
+            NEXT_PUBLIC_SUPPORT_EMAIL=support@casaura.example
+            NEXT_PUBLIC_ENABLE_DEMO_DATA=false

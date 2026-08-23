@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PublicPropertyCard } from "@/components/marketplace/public-property-card";
+import { PrivacyControls } from "@/components/marketplace/privacy-controls";
 import { AccountCollaboration } from "@/components/marketplace/account-collaboration";
 import { Icon } from "@/components/ui/icon";
 import { apiQuery, type ApiError } from "@/lib/api-client";
@@ -27,11 +28,11 @@ export function AccountDashboard() {
   }, []);
 
   return <main className="account-page shell">
-    <header className="account-heading"><span><Icon name="heart" /></span><div><p>Private consumer account</p><h1>Your property search</h1><p>Keep favorites, likes, and dislikes organized across devices.</p></div></header>
+    <header className="account-heading"><span><Icon name="heart" /></span><div><p>Private consumer account</p><h1>Your property search</h1><p>Keep favorites, collections, comparisons, and assistant sessions organized across devices.</p></div><div className="account-heading__actions"><Link className="button button--outline" href="/collections">Collections</Link><Link className="button button--primary" href="/assistant"><Icon name="sparkle" /> Property assistant</Link></div></header>
     {error?.code === "UNAUTHENTICATED" ? <section className="account-sign-in"><Icon name="user" /><h2>Sign in to see your saved homes</h2><p>Your account state is private and never inferred from another visitor’s activity.</p><Link className="button button--primary" href="/sign-in?next=/account">Sign in</Link></section> : null}
     {error && error.code !== "UNAUTHENTICATED" ? <section className="account-sign-in" role="alert"><Icon name="shield" /><h2>Account state is unavailable</h2><p>{error.message}</p><button className="button button--outline" type="button" onClick={() => window.location.reload()}>Try again</button></section> : null}
     {!error && !data ? <section className="account-loading" role="status"><span /> Loading your private shortlist…</section> : null}
-    {data ? <><AccountCollaboration /><div className="account-sections">{sections.map((section) => <AccountSection key={section.key} title={section.label} empty={section.empty} listings={data[section.key]} />)}</div></> : null}
+    {data ? <><AccountCollaboration /><div className="account-sections">{sections.map((section) => <AccountSection key={section.key} title={section.label} empty={section.empty} listings={data[section.key]} />)}<PrivacyControls /></div></> : null}
   </main>;
 }
 

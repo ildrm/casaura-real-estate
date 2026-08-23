@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { registerVerifiedAgencyOwner } from "./support/identity";
 
 test("consumer search preserves intent and query", async ({ page }) => {
   await page.goto("/");
@@ -14,19 +15,15 @@ test("agency owner can register and enter the tenant workspace", async ({ page }
   const agencyName = `Tenant Truth Realty ${project} ${Date.now()}`;
   const email = `maya.${project}.${Date.now()}@example.com`;
 
-  await page.goto("/register/agency");
-  await page.getByLabel("Agency name").fill(agencyName);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Your name").fill("Maya Patel");
-  await page.getByLabel("Work email").fill(email);
-  await page.locator('input[name="password"]').fill("SecurePass123!");
-  await page.getByLabel("Confirm password").fill("SecurePass123!");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Create agency workspace" }).click();
+  await registerVerifiedAgencyOwner(page, {
+    agencyName,
+    email,
+    ownerName: "Maya Patel",
+  });
 
-  await expect(page).toHaveURL(/\/agency\/dashboard$/);
   await expect(page.getByRole("heading", { name: "Agency overview" })).toBeVisible();
-  await expect(page.getByText("Signed-in user")).toHaveCount(1);
+  await expect(page.getByText("Maya Patel", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Workspace protected" })).toBeVisible();
   await expect(page.getByText(/80% complete/)).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("casaura.activeAgencyId"))).not.toBeNull();
 

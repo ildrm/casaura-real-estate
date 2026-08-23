@@ -67,6 +67,60 @@ class ListingMediaTest extends TestCase
         $this->assertSame([], Storage::disk('listing_media')->allFiles());
     }
 
+    public function test_malware_signature_is_rejected_before_processing_without_residue(): void
+    {
+        [$user, $agency] = $this->createAgencyOwner();
+        $this->actAsAgencyOwner($user);
+        $listingId = $this->postJson('/api/v1/listings', $this->validListingPayload(), $this->agencyHeaders($agency))
+            ->assertCreated()->json('data.id');
+        $file = UploadedFile::fake()->image('infected.jpg');
+        file_put_contents($file->getRealPath(), 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE', FILE_APPEND);
+
+        $this->withHeaders($this->agencyHeaders($agency, ['Idempotency-Key' => 'infected-1']))
+            ->post("/api/v1/listings/{$listingId}/media", ['file' => $file])
+            ->assertUnprocessable()
+            ->assertJsonPath('error.code', 'MEDIA_MALWARE_DETECTED');
+
+        $this->assertDatabaseCount('media', 0);
+        $this->assertDatabaseCount('media_derivatives', 0);
+        $this->assertSame([], Storage::disk('listing_media')->allFiles());
+    }
+
+    public function test_quarantine_purge_and_reconciliation_are_idempotent(): void
+    {
+        [$user, $agency] = $this->createAgencyOwner();
+        $this->actAsAgencyOwner($user);
+        $listingId = $this->postJson('/api/v1/listings', $this->validListingPayload(), $this->agencyHeaders($agency))
+            ->assertCreated()->json('data.id');
+        $mediaId = (string) Str::uuid();
+        $key = "quarantine/{$agency->id}/{$mediaId}/original.jpg";
+        DB::table('media')->insert([
+            'id' => $mediaId,
+            'agency_id' => $agency->id,
+            'listing_id' => $listingId,
+            'idempotency_key' => 'expired-quarantine',
+            'original_name' => 'expired.jpg',
+            'mime_type' => 'image/jpeg',
+            'byte_size' => 10,
+            'width' => 100,
+            'height' => 100,
+            'position' => 1,
+            'checksum_sha256' => hash('sha256', 'expired'),
+            'storage_key' => $key,
+            'created_at' => now()->subDays(40),
+            'updated_at' => now()->subDays(40),
+            'deleted_at' => now()->subDays(31),
+        ]);
+        Storage::disk('listing_media')->put($key, 'quarantined');
+
+        $this->artisan('media:reconcile')->assertSuccessful();
+        $this->artisan('media:purge-quarantine --days=30')->assertSuccessful();
+        $this->artisan('media:purge-quarantine --days=30')->assertSuccessful();
+
+        $this->assertDatabaseMissing('media', ['id' => $mediaId]);
+        Storage::disk('listing_media')->assertMissing($key);
+    }
+
     public function test_media_quota_reorder_and_soft_delete_are_enforced(): void
     {
         [$user, $agency] = $this->createAgencyOwner();

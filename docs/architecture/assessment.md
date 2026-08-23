@@ -6,12 +6,12 @@ The starting repository contained only a license and a one-line README, so there
 
 ## Assumptions
 
-1. The first commercial region and regulatory jurisdiction are not yet fixed. Currency, units, locale, consent, retention, and fair-housing policy remain configuration or policy modules.
+1. The approved launch profile is United States and USD. Production builds require explicit units, locale, country, operator, and legal version; counsel-approved consent, retention exceptions, fair-housing, Stripe automatic-tax, and state/local obligations remain launch gates.
 2. Agencies are the tenant boundary. A user may belong to multiple agencies and must explicitly select an active agency context.
 3. PostgreSQL/PostGIS is authoritative. OpenSearch, Redis, analytics stores, and CDN caches are derived or ephemeral.
 4. The first-party web application uses secure Sanctum cookie sessions; future native and partner clients use scoped tokens/OAuth.
 5. Exact property location may be private. Public projections can use an approximate point while the authoritative point remains restricted.
-6. External real-estate data is unavailable at Phase 1. Provider interfaces are designed now; provider-backed modules remain hidden until licensed data exists.
+6. The production provider choices are RESO Web API/OData, OpenAI Responses API, and Stripe Billing/Checkout. Provider-neutral ports and deterministic test adapters remain authoritative architecture boundaries; live modules stay feature-gated until licensed/approved credentials and staging evidence exist.
 7. Casaura is a working brand for this implementation and should receive legal/trademark review before public launch.
 8. The API and web app deploy independently. The first implementation stays in one repository to keep contracts, tests, and local development coordinated.
 
@@ -34,8 +34,8 @@ apps/
 docs/
   architecture/            Decisions, diagrams, data model, delivery plan
   design/                  Accepted concepts and extracted tokens
-infra/docker/              Local service configuration
-packages/contracts/        OpenAPI and generated cross-app types
+infra/docker/              Production images and local service configuration
+packages/contracts/        OpenAPI contract and future generated cross-app types
 ```
 
 ## System context
@@ -52,21 +52,21 @@ flowchart LR
   API --> Search[(OpenSearch)]
   API --> Storage[Storage abstraction]
   Storage --> S3[S3 / MinIO]
-  Storage --> Telegram[Telegram provider]
-  API --> Providers[RESO / MLS / partner adapters]
+  API --> Providers[RESO Web API / OData]
   API --> Notify[Email / push / SMS adapters]
-  API --> AI[Grounded AI provider adapters]
+  API --> AI[OpenAI Responses / deterministic adapter]
+  API --> Billing[Stripe Checkout / Billing / webhooks]
 ```
 
 ## Deployment topology
 
 - `web`: stateless Next.js nodes behind a CDN/edge cache.
-- `api`: stateless Laravel HTTP nodes, separate queue workers, scheduler, and websocket gateway.
+- `api`: stateless Laravel HTTP nodes with separate queue workers and singleton scheduler. Collaboration currently uses bounded polling; no websocket gateway is claimed.
 - `postgres`: managed HA PostgreSQL with PostGIS and point-in-time recovery.
 - `redis`: cache, rate limits, locks, queues, session support, and realtime fan-out.
-- `opensearch`: derived search cluster; every index is rebuildable.
+- `opensearch`: optional derived search cluster; PostgreSQL/PostGIS keyset search is the production-capable default and every optional index is rebuildable.
 - `object storage`: private-by-default originals plus policy-controlled derivatives behind signed or proxied delivery.
-- observability: OpenTelemetry-compatible traces, structured JSON logs, metrics, error tracking, and redaction at ingestion.
+- observability: structured JSON logs, request/release correlation, liveness/readiness, component health, heartbeats, and externally collected metrics/alerts. Distributed tracing is a hosting integration, not a repository claim.
 
 ## Domain boundaries
 
@@ -82,6 +82,7 @@ flowchart LR
 | Messaging & notifications | conversations, messages, preferences, adapters | lead ownership |
 | Agency growth | storefront, newsletter, analytics, demand intelligence | global moderation |
 | Integrations & provenance | providers, mappings, sync, raw records, deduplication | consumer-facing editorial copy |
+| Grounded AI | sessions, constrained generations, citations, redaction, safety evidence | authoritative listing facts or autonomous publication |
 | Trust & moderation | verification, reports, cases, sanctions, audit | billing settlement |
 | Entitlements & billing | plans, subscriptions, quotas, promotion policy, invoices | feature implementation |
 | Platform configuration | flags, settings, CMS, SEO configuration | infrastructure secrets in source control |
@@ -111,15 +112,27 @@ sequenceDiagram
 
 ### Search indexing
 
-`listing transaction → outbox event → queue → projection builder → OpenSearch alias`. Search results return listing IDs; restricted/source-sensitive fields are hydrated through authorized API projections. Reindexing writes a new versioned index and atomically swaps the alias.
+`listing transaction → outbox event → projection builder → PostgreSQL search document`, with an optional OpenSearch adapter and versioned index reset restricted to an explicit console-only maintenance mode. Search results return only public-safe projection fields.
 
 ### Media upload
 
-`authenticated upload → tenant quota → extension/size check → detected MIME → hash → isolated malware/metadata processing → derivatives → StorageProviderInterface → media record → publishable state`. Telegram is one adapter and is never referenced from catalogue business logic.
+`authenticated upload → tenant quota → size check → ClamAV scan → detected MIME/decode/dimension limit → metadata-stripping WebP derivatives → private StorageProviderInterface → media record → publishable state`. Delete moves objects to quarantine; scheduled reconciliation and purge provide recovery and lifecycle enforcement.
 
 ### Data ingestion
 
 `provider adapter → raw immutable envelope → mapping version → canonical validation → provenance records → identity candidates → human review when uncertain → listing/property transaction → indexing event`.
+
+The production RESO adapter discovers bounded OData metadata, uses OAuth client
+credentials from a named mounted secret, follows bounded pagination, commits cursors
+only after successful processing, and preserves exact-replay source evidence.
+
+### Grounded AI
+
+`redact request → derive bounded schema input → OpenAI Responses or deterministic adapter → validate strict JSON → bind public listing citations → persist expiry-bound evidence → require user confirmation/human apply`. Provider failure or malformed output retries once. Search/comparison then falls back deterministically; listing copy fails safely rather than applying speculative content.
+
+### Billing and promotion
+
+`tenant checkout request → Stripe-hosted Checkout with automatic tax → signed idempotent webhook → monotonic subscription/invoice projection → entitlement resolver`. Promotion policies are immutable versions; sponsored inventory is labeled, capped under lock, privacy-deduplicated, auto-paused when unavailable, and queried separately from organic ranking.
 
 ## Key architectural decisions
 

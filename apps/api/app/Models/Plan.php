@@ -12,7 +12,7 @@ class Plan extends Model
 
     protected $fillable = [
         'name', 'slug', 'is_active', 'is_public', 'price_amount_minor',
-        'price_currency', 'billing_interval',
+        'price_currency', 'billing_interval', 'provider_price_id',
     ];
 
     public function entitlements(): HasMany

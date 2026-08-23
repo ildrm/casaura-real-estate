@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { publicConfig } from "@/lib/public-config";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(publicConfig.siteUrl),
   title: {
     default: "Casaura — Find a place that fits your life",
     template: "%s | Casaura",
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang={publicConfig.locale.split("-")[0]} className="h-full antialiased" data-scroll-behavior="smooth">
       <body className="min-h-full">{children}</body>
     </html>
   );

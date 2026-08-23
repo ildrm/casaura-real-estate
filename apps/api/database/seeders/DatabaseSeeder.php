@@ -9,6 +9,7 @@ use App\Models\Plan;
 use App\Models\PlanEntitlement;
 use App\Models\PropertyFeatureDefinition;
 use App\Models\PropertyType;
+use App\Models\RealEstateDataProvider;
 use App\Models\Role;
 use App\Models\Setting;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -102,6 +103,19 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
+        $professional = Plan::query()->updateOrCreate(
+            ['slug' => 'professional'],
+            [
+                'name' => 'Professional',
+                'is_active' => true,
+                'is_public' => true,
+                'price_amount_minor' => 4900,
+                'price_currency' => 'USD',
+                'billing_interval' => 'month',
+                'provider_price_id' => config('billing.stripe.professional_price_id'),
+            ],
+        );
+
         foreach ([
             'agency_storefronts' => true,
             'team_management' => true,
@@ -120,6 +134,38 @@ class DatabaseSeeder extends Seeder
                 }],
             );
         }
+
+        foreach ([
+            'agency_storefronts' => [true, null],
+            'team_management' => [true, 100],
+            'listing_creation' => [true, 2000],
+            'media_storage_mb' => [true, 20480],
+            'messaging' => [true, null],
+            'viewings' => [true, null],
+            'comparisons' => [true, null],
+            'collaborative_collections' => [true, null],
+            'mls' => [true, null],
+            'ai_search' => [true, null],
+            'ai_listing_writer' => [true, null],
+            'sponsored_listings' => [true, null],
+            'payments' => [true, null],
+        ] as $key => [$value, $quota]) {
+            PlanEntitlement::query()->updateOrCreate(
+                ['plan_id' => $professional->id, 'key' => $key],
+                ['value' => $value, 'quota' => $quota],
+            );
+        }
+
+        RealEstateDataProvider::query()->updateOrCreate(
+            ['key' => 'reso'],
+            [
+                'name' => 'RESO Web API',
+                'adapter' => 'reso_odata',
+                'protocol' => 'OData 4.01',
+                'is_active' => true,
+                'capabilities' => ['read', 'metadata', 'incremental'],
+            ],
+        );
 
         foreach ([
             'house' => ['House', 'residential'],
@@ -168,14 +214,15 @@ class DatabaseSeeder extends Seeder
 
         $flags = [
             'agency_registration' => true,
-            'customer_registration' => true,
+            'customer_registration' => false,
             'agency_storefronts' => true,
             'team_management' => true,
             'listing_creation' => true,
+            'media_storage_mb' => true,
             'likes' => true,
             'dislikes' => true,
-            'comparisons' => true,
-            'collaborative_collections' => true,
+            'comparisons' => false,
+            'collaborative_collections' => false,
             'viewings' => true,
             'messaging' => true,
             'comments' => false,

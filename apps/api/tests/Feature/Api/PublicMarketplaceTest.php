@@ -67,6 +67,9 @@ class PublicMarketplaceTest extends TestCase
         $this->get($detail->json('data.media.0.display_url'))
             ->assertOk()
             ->assertHeader('content-type', 'image/webp');
+        $this->getJson('/api/v1/public/discovery')->assertOk()
+            ->assertJsonPath('data.listings.0.id', $published['id'])
+            ->assertJsonPath('data.agencies.0.slug', $agency->slug);
     }
 
     public function test_search_applies_hard_filters_bounds_radius_and_excludes_unpublished_inventory(): void
@@ -107,6 +110,31 @@ class PublicMarketplaceTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('error.code', 'VALIDATION_FAILED')
             ->assertJsonStructure(['error' => ['fields' => ['radius']]]);
+        $this->getJson('/api/v1/public/search?bounds=181,43.6,-122.3,43.9')
+            ->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['bounds']]]);
+    }
+
+    public function test_search_uses_stable_keyset_cursors_and_rejects_cursor_reuse_across_sorts(): void
+    {
+        [$owner, $agency] = $this->createAgencyOwner();
+        $firstListing = $this->createPublishedListing($owner, $agency, ['reference' => 'CURSOR-FIRST']);
+        $secondListing = $this->createPublishedListing($owner, $agency, ['reference' => 'CURSOR-SECOND']);
+
+        $firstPage = $this->getJson('/api/v1/public/search?limit=1&sort=newest')->assertOk()
+            ->assertJsonCount(1, 'data')->assertJsonPath('meta.count', 2);
+        $cursor = $firstPage->json('meta.next_cursor');
+        $this->assertNotNull($cursor);
+        $secondPage = $this->getJson('/api/v1/public/search?limit=1&sort=newest&cursor='.urlencode($cursor))
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.count', 2);
+        $this->assertNotSame($firstPage->json('data.0.id'), $secondPage->json('data.0.id'));
+        $this->assertEqualsCanonicalizing(
+            [$firstListing['id'], $secondListing['id']],
+            [$firstPage->json('data.0.id'), $secondPage->json('data.0.id')],
+        );
+        $this->getJson('/api/v1/public/search?limit=1&sort=price_asc&cursor='.urlencode($cursor))
+            ->assertUnprocessable()->assertJsonPath('error.code', 'SEARCH_CURSOR_INVALID');
+        $this->getJson('/api/v1/public/search?cursor=not-a-cursor')
+            ->assertUnprocessable()->assertJsonPath('error.code', 'SEARCH_CURSOR_INVALID');
     }
 
     public function test_withdrawal_removes_public_projection_but_keeps_canonical_history(): void

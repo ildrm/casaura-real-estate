@@ -83,8 +83,14 @@ class PublicSearchController extends Controller
             throw ValidationException::withMessages([$field => ['Use comma-separated numeric coordinates.']]);
         }
         $numbers = array_map(fn ($item) => (float) trim($item), $values);
-        if ($field === 'bounds' && ($numbers[1] < -90 || $numbers[1] > 90 || $numbers[3] < -90 || $numbers[3] > 90)) {
-            throw ValidationException::withMessages([$field => ['Latitude must be between -90 and 90.']]);
+        if ($field === 'bounds' && (
+            $numbers[0] < -180 || $numbers[0] > 180 || $numbers[2] < -180 || $numbers[2] > 180
+            || $numbers[1] < -90 || $numbers[1] > 90 || $numbers[3] < -90 || $numbers[3] > 90
+            || $numbers[1] > $numbers[3]
+        )) {
+            throw ValidationException::withMessages([$field => [
+                'Use valid minLongitude,minLatitude,maxLongitude,maxLatitude bounds; longitude may wrap the dateline.',
+            ]]);
         }
 
         return $numbers;

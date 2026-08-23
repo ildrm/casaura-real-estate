@@ -19,7 +19,7 @@ class TenantIsolationTest extends TestCase
         $this->seed();
         [$userA, $agencyA] = $this->createAgencyWithOwner('Agency A');
         [, $agencyB] = $this->createAgencyWithOwner('Agency B');
-        Sanctum::actingAs($userA);
+        Sanctum::actingAs($userA, ['*', 'mfa']);
 
         $this->getJson('/api/v1/agency', ['Agency-ID' => $agencyB->id])
             ->assertForbidden()
@@ -35,7 +35,7 @@ class TenantIsolationTest extends TestCase
         $this->seed();
         [$userA, $agencyA] = $this->createAgencyWithOwner('Agency A');
         [$userB, $agencyB] = $this->createAgencyWithOwner('Agency B');
-        Sanctum::actingAs($userA);
+        Sanctum::actingAs($userA, ['*', 'mfa']);
 
         $response = $this->getJson('/api/v1/agency/members', ['Agency-ID' => $agencyA->id]);
 
@@ -50,7 +50,7 @@ class TenantIsolationTest extends TestCase
     {
         $this->seed();
         [$user] = $this->createAgencyWithOwner('Agency A');
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*', 'mfa']);
 
         $this->getJson('/api/v1/agency')
             ->assertUnprocessable()
@@ -61,6 +61,10 @@ class TenantIsolationTest extends TestCase
     private function createAgencyWithOwner(string $name): array
     {
         $user = User::factory()->create();
+        $user->forceFill([
+            'mfa_secret' => 'JBSWY3DPEHPK3PXP',
+            'mfa_confirmed_at' => now(),
+        ])->save();
         $agency = Agency::query()->create([
             'owner_user_id' => $user->id,
             'name' => $name,

@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Casaura API
-  version: 1.5.0-phase6
-  description: Versioned contract through Phase 6 for identity, tenancy, listings, marketplace, engagement, collaboration, agency growth, and administration.
+  version: 1.10.0-release-candidate
+  description: Production-candidate contract for identity, tenancy, listings, marketplace, integrations, grounded AI, billing, privacy, and administration.
 servers:
   - url: http://localhost:8000/api/v1
     description: Local development
+security: []
 tags:
   - name: System
   - name: Authentication
@@ -17,7 +18,25 @@ tags:
   - name: Collaboration
   - name: Agency Product
   - name: Administration
+  - name: Privacy
+  - name: Integrations
+  - name: Advanced Marketplace
+  - name: Grounded AI
+  - name: Billing
 paths:
+  /health/live:
+    get:
+      tags: [System]
+      operationId: liveness
+      responses:
+        "200": { description: Process is alive, content: { application/json: { schema: { $ref: "#/components/schemas/OperationsHealth" } } } }
+  /health/ready:
+    get:
+      tags: [System]
+      operationId: readiness
+      responses:
+        "200": { description: Required dependencies and process heartbeats are ready, content: { application/json: { schema: { $ref: "#/components/schemas/OperationsHealth" } } } }
+        "503": { description: A required dependency or process heartbeat is unavailable }
   /health:
     get:
       tags: [System]
@@ -51,6 +70,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PrincipalResponse"
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/forgot-password:
+    post:
+      tags: [Authentication]
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses:
+        "200": { description: A non-enumerating recovery response }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/reset-password:
+    post:
+      tags: [Authentication]
+      operationId: resetPassword
+      responses:
+        "200": { description: Password reset and existing sessions revoked }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/invitations/{token}/accept:
+    post:
+      tags: [Authentication, Agencies]
+      operationId: acceptAgencyInvitation
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Existing user membership activated }
+        "201": { description: Invited user account and membership activated }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/mfa/challenge:
+    post:
+      tags: [Authentication]
+      operationId: challengeMfa
+      responses:
+        "200": { description: MFA challenge accepted and session upgraded }
         "422": { $ref: "#/components/responses/ValidationError" }
   /auth/register-agency:
     post:
@@ -106,6 +165,47 @@ paths:
       responses:
         "204": { description: Signed out }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+  /auth/email/verification-notification:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: resendEmailVerification
+      responses:
+        "202": { description: Verification delivery accepted without enumeration }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /auth/email/verify/{id}/{hash}:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: verifyEmail
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: hash, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Signed email address verified }
+        "403": { description: Invalid or expired signature }
+  /auth/mfa/setup:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: setupMfa
+      responses:
+        "200": { description: Pending TOTP enrollment returned once }
+  /auth/mfa/confirm:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: confirmMfa
+      responses:
+        "200": { description: TOTP enrollment confirmed and recovery codes returned once }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/mfa:
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Authentication]
+      operationId: disableMfa
+      responses:
+        "204": { description: MFA disabled and established sessions revoked }
   /me:
     get:
       security: [{ sanctum: [] }]
@@ -511,6 +611,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PublicSearchResponse" }
         "422": { $ref: "#/components/responses/ValidationError" }
+  /public/discovery:
+    get:
+      tags: [Marketplace]
+      operationId: publicDiscovery
+      responses:
+        "200":
+          description: Stable public listing and storefront identifiers used for sitemap discovery.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [listings, agencies]
+                    properties:
+                      listings: { type: array, items: { type: object, additionalProperties: true } }
+                      agencies: { type: array, items: { type: object, additionalProperties: true } }
   /public/listings/{listing}:
     get:
       tags: [Marketplace]
@@ -557,6 +676,41 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/EngagementCollectionsResponse" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
+  /account/privacy/requests:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Privacy]
+      operationId: listPrivacyRequests
+      responses:
+        "200": { description: Current user's recent export and deletion requests }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Privacy]
+      operationId: createPrivacyRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties: { type: { type: string, enum: [export, deletion] } }
+      responses:
+        "202": { description: Export processing or reviewed deletion request accepted }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /account/privacy/requests/{privacyRequest}/download:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Privacy]
+      operationId: downloadPrivacyExport
+      parameters:
+        - { in: path, name: privacyRequest, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Decrypted JSON export for its authenticated subject, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "410": { description: Export expired }
   /account/favorites/{listing}:
     parameters:
       - $ref: "#/components/parameters/ListingId"
@@ -632,7 +786,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/PublicLeadRequest" }
       responses:
-        "201": { description: Inquiry, lead, conversation, notification, and audit evidence created, content: { application/json: { schema: { $ref: "#/components/schemas/LeadResponse" } } } }
+        "201": { description: "Inquiry, lead, conversation, notification, and audit evidence created", content: { application/json: { schema: { $ref: "#/components/schemas/LeadResponse" } } } }
         "200": { description: Idempotent inquiry replay, content: { application/json: { schema: { $ref: "#/components/schemas/LeadResponse" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/ConflictError" }
@@ -804,7 +958,27 @@ paths:
       parameters:
         - { in: path, name: member, required: true, schema: { type: string, format: uuid } }
         - { $ref: "#/components/parameters/AgencyId" }
-      responses: { "200": { description: Member status, title, or role updated }, "404": { $ref: "#/components/responses/NotFound" }, "422": { $ref: "#/components/responses/ValidationError" } }
+      responses: { "200": { description: "Member status, title, or role updated" }, "404": { $ref: "#/components/responses/NotFound" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /agency/team/{member}/invitation:
+    parameters:
+      - { in: path, name: member, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/AgencyId" }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: resendAgencyInvitation
+      responses:
+        "200": { description: Invitation token rotated and delivery requested }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Agency Product]
+      operationId: cancelAgencyInvitation
+      responses:
+        "204": { description: Pending invitation cancelled and token retired }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ConflictError" }
   /public/agencies/{agency}/newsletter/subscriptions:
     post:
       tags: [Agency Product]
@@ -932,12 +1106,12 @@ paths:
       operationId: createCustomRole
       responses: { "201": { description: Safe non-system role created }, "422": { $ref: "#/components/responses/ValidationError" } }
   /admin/roles/{role}:
+    parameters:
+      - { in: path, name: role, required: true, schema: { type: string, format: uuid } }
     patch:
       security: [{ sanctum: [] }]
       tags: [Administration]
       operationId: updateCustomRole
-      parameters:
-        - { in: path, name: role, required: true, schema: { type: string, format: uuid } }
       responses: { "200": { description: Custom role updated }, "409": { $ref: "#/components/responses/ConflictError" }, "422": { $ref: "#/components/responses/ValidationError" } }
     delete:
       security: [{ sanctum: [] }]
@@ -956,6 +1130,384 @@ paths:
       tags: [Administration]
       operationId: adminHealth
       responses: { "200": { description: Safe component health and backlog counts, content: { application/json: { schema: { $ref: "#/components/schemas/AdminHealthResponse" } } } } }
+  /integrations/connections:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: listProviderConnections
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant provider connections without secret values }, "403": { $ref: "#/components/responses/TenantDenied" } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: createProviderConnection
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderConnectionInput" }
+      responses: { "201": { description: Provider connection created }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /integrations/connections/{connection}:
+    parameters:
+      - { in: path, name: connection, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/AgencyId" }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: getProviderConnection
+      responses: { "200": { description: Safe connection projection }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: updateProviderConnection
+      responses: { "200": { description: Versioned connection update }, "409": { $ref: "#/components/responses/ConflictError" } }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: disableProviderConnection
+      responses: { "204": { description: Provider connection disabled }, "404": { $ref: "#/components/responses/NotFound" } }
+  /integrations/connections/{connection}/mappings:
+    parameters:
+      - { in: path, name: connection, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/AgencyId" }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: listFieldMappings
+      responses: { "200": { description: Immutable mapping versions } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: createFieldMapping
+      responses: { "201": { description: Active mapping version created }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /integrations/connections/{connection}/metadata:
+    parameters:
+      - { in: path, name: connection, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/AgencyId" }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: discoverProviderMetadata
+      responses:
+        "200": { description: Bounded RESO resource and field metadata without credentials }
+        "502":
+          description: Provider metadata authentication or response failed safely
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /integrations/connections/{connection}/syncs:
+    parameters:
+      - { in: path, name: connection, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/AgencyId" }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: listIntegrationSyncs
+      responses: { "200": { description: Tenant sync history } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: startIntegrationSync
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "202": { description: Synchronization accepted and completed or queued }, "200": { description: Idempotent replay }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /integrations/syncs/{sync}:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: getIntegrationSync
+      parameters:
+        - { in: path, name: sync, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Sync counters and safe failure state }, "404": { $ref: "#/components/responses/NotFound" } }
+  /integrations/import-errors:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: listImportErrors
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Redacted tenant import errors } }
+  /integrations/duplicate-candidates:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: listDuplicateCandidates
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant duplicate review queue } }
+  /integrations/duplicate-candidates/{candidate}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Integrations]
+      operationId: reviewDuplicateCandidate
+      parameters:
+        - { in: path, name: candidate, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Audited reversible duplicate decision }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /account/collections:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: listCollections
+      responses: { "200": { description: Owned and accepted private collections } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: createCollection
+      responses: { "201": { description: Private collection created }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /account/collections/{collection}:
+    parameters:
+      - { in: path, name: collection, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: getCollection
+      responses: { "200": { description: Authorized private collection }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: updateCollection
+      responses: { "200": { description: Versioned owner update }, "409": { $ref: "#/components/responses/ConflictError" } }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: deleteCollection
+      responses: { "204": { description: Collection soft deleted }, "404": { $ref: "#/components/responses/NotFound" } }
+  /account/collections/{collection}/items:
+    parameters:
+      - { in: path, name: collection, required: true, schema: { type: string, format: uuid } }
+    put:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: addCollectionItem
+      responses: { "200": { description: Published listing added idempotently }, "404": { $ref: "#/components/responses/NotFound" } }
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: removeCollectionItem
+      responses: { "200": { description: Listing removed idempotently }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: reorderCollectionItems
+      responses: { "200": { description: Complete versioned item order stored }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /account/collections/{collection}/members:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: inviteCollectionMember
+      parameters:
+        - { in: path, name: collection, required: true, schema: { type: string, format: uuid } }
+      responses: { "201": { description: Expiring collection invitation created }, "403": { $ref: "#/components/responses/TenantDenied" } }
+  /account/collections/{collection}/members/{user}:
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: revokeCollectionMember
+      parameters:
+        - { in: path, name: collection, required: true, schema: { type: string, format: uuid } }
+        - { in: path, name: user, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Collection access revoked immediately } }
+  /account/collection-invitations/{token}/accept:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: acceptCollectionInvitation
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses: { "200": { description: Collection membership accepted }, "404": { $ref: "#/components/responses/NotFound" } }
+  /public/compare:
+    get:
+      tags: [Advanced Marketplace]
+      operationId: comparePublishedListings
+      parameters:
+        - { in: query, name: ids, required: true, schema: { type: string } }
+      responses: { "200": { description: Two through five allowlisted listing comparisons }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /account/comparisons:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: listComparisonHistory
+      responses: { "200": { description: Private comparison history } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: saveComparisonHistory
+      responses: { "201": { description: Comparison saved }, "200": { description: Idempotent replay }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /account/comparisons/{comparison}:
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Advanced Marketplace]
+      operationId: deleteComparisonHistory
+      parameters:
+        - { in: path, name: comparison, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Private comparison removed }, "404": { $ref: "#/components/responses/NotFound" } }
+  /public/listings/{listing}/recommendations:
+    get:
+      tags: [Advanced Marketplace]
+      operationId: recommendPublishedListings
+      parameters: [{ $ref: "#/components/parameters/ListingId" }]
+      responses: { "200": { description: Deterministic organic recommendations with reason codes }, "404": { $ref: "#/components/responses/NotFound" } }
+  /public/map-layers:
+    get:
+      tags: [Advanced Marketplace]
+      operationId: getPublicMapLayers
+      parameters:
+        - { in: query, name: layer, required: true, schema: { type: string, enum: [density, price_band, property_type] } }
+        - { in: query, name: bounds, schema: { type: string } }
+      responses: { "200": { description: Bucketed public-coordinate layer }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /public/market-analytics:
+    get:
+      tags: [Advanced Marketplace]
+      operationId: getPublicMarketAnalytics
+      parameters:
+        - { in: query, name: locality, schema: { type: string } }
+        - { in: query, name: region, schema: { type: string } }
+        - { in: query, name: from, required: true, schema: { type: string, format: date } }
+        - { in: query, name: to, required: true, schema: { type: string, format: date } }
+      responses: { "200": { description: Minimum-cohort public market aggregates }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /ai/search:
+    post:
+      tags: [Grounded AI]
+      operationId: groundedConversationalSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties: { message: { type: string, minLength: 3, maxLength: 2000 } }
+      responses: { "200": { description: "Unapplied parsed filters, grounded matches, citations, and provider metadata" }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /ai/comparisons:
+    post:
+      tags: [Grounded AI]
+      operationId: groundedComparisonAssistant
+      responses: { "200": { description: Cited comparison explanation }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /account/ai-sessions:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Grounded AI]
+      operationId: listAiSessions
+      responses: { "200": { description: Private retained AI sessions } }
+  /account/ai-sessions/{session}:
+    delete:
+      security: [{ sanctum: [] }]
+      tags: [Grounded AI]
+      operationId: deleteAiSession
+      parameters:
+        - { in: path, name: session, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Session content deleted }, "404": { $ref: "#/components/responses/NotFound" } }
+  /account/ai-generations/{generation}/feedback:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Grounded AI]
+      operationId: recordAiGenerationFeedback
+      parameters:
+        - { in: path, name: generation, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Bounded user feedback recorded }, "404": { $ref: "#/components/responses/NotFound" } }
+  /listings/{listing}/ai-suggestions:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Grounded AI, Listings]
+      operationId: createAiListingSuggestion
+      parameters:
+        - { $ref: "#/components/parameters/AgencyId" }
+        - { $ref: "#/components/parameters/ListingId" }
+      responses: { "201": { description: Grounded suggestion created without listing mutation }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /listings/{listing}/ai-suggestions/{suggestion}/apply:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Grounded AI, Listings]
+      operationId: applyAiListingSuggestion
+      parameters:
+        - { $ref: "#/components/parameters/AgencyId" }
+        - { $ref: "#/components/parameters/ListingId" }
+        - { in: path, name: suggestion, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Selected suggestion fields applied with optimistic versioning }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /admin/ai-safety-events:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Grounded AI, Administration]
+      operationId: listAiSafetyEvents
+      responses: { "200": { description: Redacted non-identifying safety event projection } }
+  /billing:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Billing]
+      operationId: getAgencyBilling
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: "Tenant plans, subscription, invoices, and payment availability" }, "403": { $ref: "#/components/responses/TenantDenied" } }
+  /billing/checkout-sessions:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Billing]
+      operationId: createBillingCheckoutSession
+      parameters:
+        - { $ref: "#/components/parameters/AgencyId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses: { "201": { description: Stripe-hosted checkout session created }, "200": { description: Idempotent replay }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /billing/portal-sessions:
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Billing]
+      operationId: createBillingPortalSession
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "201": { description: Short-lived Stripe-hosted portal session created }, "503": { description: Billing provider unavailable } }
+  /webhooks/stripe:
+    post:
+      tags: [Billing]
+      operationId: receiveStripeWebhook
+      parameters:
+        - { in: header, name: Stripe-Signature, required: true, schema: { type: string } }
+      responses: { "200": { description: Signed event durably accepted or idempotently replayed }, "400": { description: Invalid signature or payload } }
+  /admin/promotion-policies:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Billing, Administration]
+      operationId: listPromotionPolicies
+      responses: { "200": { description: Immutable promotion policy versions } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Billing, Administration]
+      operationId: createPromotionPolicy
+      responses: { "201": { description: Promotion policy version created }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /admin/promotion-policies/{policy}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Billing, Administration]
+      operationId: versionPromotionPolicy
+      parameters:
+        - { in: path, name: policy, required: true, schema: { type: string, format: uuid } }
+      responses: { "200": { description: Replacement policy version created }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /billing/promotion-campaigns:
+    get:
+      security: [{ sanctum: [] }]
+      tags: [Billing]
+      operationId: listPromotionCampaigns
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "200": { description: Tenant sponsored campaigns } }
+    post:
+      security: [{ sanctum: [] }]
+      tags: [Billing]
+      operationId: createPromotionCampaign
+      parameters: [{ $ref: "#/components/parameters/AgencyId" }]
+      responses: { "201": { description: Eligible owned listing campaign created }, "422": { $ref: "#/components/responses/ValidationError" } }
+  /billing/promotion-campaigns/{campaign}:
+    patch:
+      security: [{ sanctum: [] }]
+      tags: [Billing]
+      operationId: updatePromotionCampaign
+      parameters:
+        - { in: path, name: campaign, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/AgencyId" }
+      responses: { "200": { description: Versioned tenant campaign update }, "409": { $ref: "#/components/responses/ConflictError" } }
+  /public/sponsored-listings:
+    get:
+      tags: [Billing, Marketplace]
+      operationId: listSponsoredListings
+      parameters:
+        - { in: query, name: placement, required: true, schema: { type: string, enum: [search, detail, storefront] } }
+      responses: { "200": { description: "Clearly labelled, frequency-capped sponsored inventory" } }
 components:
   securitySchemes:
     sanctum:
@@ -984,14 +1536,42 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 160 }
   schemas:
+    ProviderConnectionInput:
+      type: object
+      required: [name, provider, base_url, token_url, client_id, secret_reference, resources, rights]
+      properties:
+        name: { type: string, maxLength: 160 }
+        provider: { type: string, const: reso }
+        base_url: { type: string, format: uri }
+        token_url: { type: string, format: uri }
+        client_id: { type: string, maxLength: 255 }
+        secret_reference: { type: string, maxLength: 255 }
+        resources: { type: array, minItems: 1, maxItems: 10, items: { type: string } }
+        rights:
+          type: object
+          required: [display, photos, attribution]
+          properties:
+            display: { type: boolean }
+            photos: { type: boolean }
+            attribution: { type: string, maxLength: 255 }
+        data_dictionary_version: { type: string, default: "2.0" }
     RegisterRequest:
       type: object
-      required: [name, email, password, password_confirmation]
+      required: [name, email, password, password_confirmation, consent, consent_version]
       properties:
         name: { type: string, minLength: 2, maxLength: 120 }
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, format: password, minLength: 12 }
         password_confirmation: { type: string, format: password }
+        consent: { type: boolean, const: true }
+        consent_version: { type: string }
+    OperationsHealth:
+      type: object
+      required: [status, service, release]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        service: { type: string, const: casaura-api }
+        release: { type: string }
     PublicLeadRequest:
       type: object
       required: [name, email, message, consent]

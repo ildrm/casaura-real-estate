@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { BrandMark } from "@/components/brand/logo";
+import { useWorkspaceSession } from "@/components/dashboard/workspace-session";
 import { Icon, type IconName } from "@/components/ui/icon";
 
 const items: Array<{ id: string; label: string; href: string; icon: IconName }> = [
@@ -12,18 +15,17 @@ const items: Array<{ id: string; label: string; href: string; icon: IconName }> 
   { id: "team", label: "Team", href: "/agency/growth#team", icon: "team" },
   { id: "analytics", label: "Analytics", href: "/agency/growth#analytics", icon: "chart" },
   { id: "profile", label: "Agency profile", href: "/agency/profile", icon: "building" },
-  { id: "integrations", label: "Growth", href: "/agency/growth", icon: "sparkle" },
-  { id: "billing", label: "Billing", href: "/agency/dashboard#workspace-status", icon: "shield" },
-  { id: "settings", label: "Settings", href: "/admin", icon: "settings" },
+  { id: "growth", label: "Growth", href: "/agency/growth", icon: "sparkle" },
+  { id: "integrations", label: "Integrations", href: "/agency/integrations", icon: "settings" },
+  { id: "billing", label: "Billing & promotion", href: "/agency/billing", icon: "shield" },
 ];
 
 export function WorkspaceSidebar({ active = "overview" }: { active?: string }) {
+  const { membership, principal, selectAgency } = useWorkspaceSession();
   return (
     <aside className="workspace-sidebar">
       <div className="workspace-sidebar__brand"><BrandMark /></div>
-      <div className="agency-switcher" role="status" aria-label="Current agency workspace">
-        <Icon name="building" /><span>Active agency</span><Icon name="chevron-down" />
-      </div>
+      <label className="agency-switcher"><Icon name="building" /><span className="sr-only">Active agency workspace</span><select value={membership.agency.id} onChange={(event) => selectAgency(event.target.value)}>{principal.memberships.map((item) => <option value={item.agency.id} key={item.id}>{item.agency.name}</option>)}</select><Icon name="chevron-down" /></label>
       <nav aria-label="Agency workspace">
         {items.map((item) => (
           <Link className={item.id === active ? "is-active" : undefined} href={item.href} key={item.label}>

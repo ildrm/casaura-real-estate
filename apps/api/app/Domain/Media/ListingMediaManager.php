@@ -4,7 +4,9 @@ namespace App\Domain\Media;
 
 use App\Domain\Listings\ListingException;
 use App\Domain\Listings\ListingManager;
+use App\Domain\Tenancy\FeatureResolver;
 use App\Domain\Tenancy\TenantContext;
+use App\Models\Agency;
 use App\Models\Listing;
 use App\Models\Media;
 use App\Models\MediaDerivative;
@@ -20,12 +22,15 @@ final class ListingMediaManager
         private readonly TenantContext $tenant,
         private readonly MediaStorage $storage,
         private readonly ImageDerivativeGenerator $images,
+        private readonly MediaMalwareScanner $scanner,
         private readonly ListingManager $listings,
+        private readonly FeatureResolver $features,
     ) {}
 
     /** @return array{media: Media, created: bool} */
     public function upload(Request $request, Listing $listing, UploadedFile $file, string $idempotencyKey, ?string $altText): array
     {
+        $this->features->ensureEnabled('media_storage_mb', $this->tenant->agency());
         $existing = Media::withTrashed()->where('listing_id', $listing->id)
             ->where('idempotency_key', $idempotencyKey)->first();
         if ($existing?->trashed()) {
@@ -42,6 +47,7 @@ final class ListingMediaManager
         if (! is_string($sourcePath)) {
             throw new ListingException('MEDIA_INVALID', 'The upload could not be read.');
         }
+        $this->scanner->assertClean($sourcePath);
         $details = $this->images->inspect($sourcePath);
         $mediaId = (string) Str::uuid();
         $extension = match ($details['mime_type']) {
@@ -71,6 +77,25 @@ final class ListingMediaManager
                 $request, $listing, $file, $idempotencyKey, $altText, $mediaId, $details,
                 $originalKey, $originalBytes, $sourcePath, $derivativeData,
             ): Media {
+                $agency = Agency::query()->whereKey($this->tenant->id())->lockForUpdate()->firstOrFail();
+                $this->features->ensureEnabled('media_storage_mb', $agency);
+                $quotaMb = $this->features->quota('media_storage_mb', $agency);
+                if ($quotaMb !== null) {
+                    $originalUsage = (int) Media::query()->where('agency_id', $agency->id)->sum('byte_size');
+                    $derivativeUsage = (int) DB::table('media_derivatives')
+                        ->join('media', 'media.id', '=', 'media_derivatives.media_id')
+                        ->where('media.agency_id', $agency->id)
+                        ->whereNull('media.deleted_at')
+                        ->sum('media_derivatives.byte_size');
+                    $proposedUsage = $originalBytes + array_sum(array_column($derivativeData, 'byte_size'));
+                    if ($originalUsage + $derivativeUsage + $proposedUsage > $quotaMb * 1024 * 1024) {
+                        throw new ListingException(
+                            'MEDIA_STORAGE_QUOTA_EXCEEDED',
+                            'The active plan media storage quota has been reached.',
+                        );
+                    }
+                }
+
                 $position = (int) $listing->media()->max('position') + 1;
                 $media = Media::query()->create([
                     'id' => $mediaId,

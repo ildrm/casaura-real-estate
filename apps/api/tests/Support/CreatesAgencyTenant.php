@@ -17,6 +17,10 @@ trait CreatesAgencyTenant
     protected function createAgencyOwner(string $name = 'Greenway Realty'): array
     {
         $user = User::factory()->create();
+        $user->forceFill([
+            'mfa_secret' => 'JBSWY3DPEHPK3PXP',
+            'mfa_confirmed_at' => now(),
+        ])->save();
         $agency = Agency::query()->create([
             'owner_user_id' => $user->id,
             'name' => $name,
@@ -41,7 +45,7 @@ trait CreatesAgencyTenant
 
     protected function actAsAgencyOwner(User $user): void
     {
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*', 'mfa']);
     }
 
     /** @return array<string, string> */

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/ui/icon";
 import { activeAgencyId, apiMutation, apiQuery, type ApiError } from "@/lib/api-client";
+import { formatDate as localizedDate } from "@/lib/localization";
 import type { Agency, AgencyAnalytics, Campaign, Closure, FeatureResolution, OpeningHour, OpeningHours, TeamMember } from "@/lib/operations-types";
 
 type GrowthData = {
@@ -101,12 +102,56 @@ export function GrowthWorkspace() {
     } catch (caught) { setNotice((caught as ApiError).message); }
   }
 
-  async function updateMember(member: TeamMember, status: TeamMember["status"]) {
+  async function deactivateMember(member: TeamMember) {
     if (!agencyIdRef.current) return;
     try {
-      const response = await apiMutation<{ data: TeamMember }>(`/api/v1/agency/team/${member.id}`, { status }, { method: "PATCH", agencyId: agencyIdRef.current });
+      const response = await apiMutation<{ data: TeamMember }>(`/api/v1/agency/team/${member.id}`, { status: "inactive" }, { method: "PATCH", agencyId: agencyIdRef.current });
       setData((current) => current ? { ...current, team: current.team.map((item) => item.id === response.data.id ? response.data : item) } : current);
-      setNotice(`Team member marked ${status}.`);
+      setNotice("Team member deactivated.");
+    } catch (caught) { setNotice((caught as ApiError).message); }
+  }
+
+  async function resendInvitation(member: TeamMember) {
+    if (!agencyIdRef.current) return;
+    try {
+      const response = await apiMutation<{ data: TeamMember }>(`/api/v1/agency/team/${member.id}/invitation`, {}, { agencyId: agencyIdRef.current });
+      setData((current) => current ? { ...current, team: current.team.map((item) => item.id === response.data.id ? response.data : item) } : current);
+      setNotice("A new invitation link was sent; the previous link is no longer valid.");
+    } catch (caught) { setNotice((caught as ApiError).message); }
+  }
+
+  async function cancelInvitation(member: TeamMember) {
+    if (!agencyIdRef.current || !window.confirm(`Cancel the invitation for ${member.user.email}?`)) return;
+    try {
+      await apiMutation(`/api/v1/agency/team/${member.id}/invitation`, {}, { method: "DELETE", agencyId: agencyIdRef.current });
+      setData((current) => current ? { ...current, team: current.team.map((item) => item.id === member.id ? { ...item, status: "inactive", invitation_expires_at: null } : item) } : current);
+      setNotice("Invitation cancelled.");
+    } catch (caught) { setNotice((caught as ApiError).message); }
+  }
+
+  async function updatePublicVisibility(member: TeamMember, isPublic: boolean) {
+    if (!agencyIdRef.current) return;
+    try {
+      const response = await apiMutation<{ data: TeamMember }>(`/api/v1/agency/team/${member.id}`, {
+        is_public: isPublic,
+        public_position: isPublic ? member.public_position ?? 100 : null,
+      }, { method: "PATCH", agencyId: agencyIdRef.current });
+      setData((current) => current ? { ...current, team: current.team.map((item) => item.id === response.data.id ? response.data : item) } : current);
+      setNotice(isPublic ? "Team member published on the storefront." : "Team member removed from the storefront.");
+    } catch (caught) { setNotice((caught as ApiError).message); }
+  }
+
+  async function reinvite(member: TeamMember) {
+    if (!agencyIdRef.current) return;
+    try {
+      const response = await apiMutation<{ data: TeamMember }>("/api/v1/agency/team", {
+        name: member.user.name,
+        email: member.user.email,
+        job_title: member.job_title,
+        role_slug: member.roles[0]?.slug ?? "agent",
+      }, { agencyId: agencyIdRef.current });
+      setData((current) => current ? { ...current, team: current.team.map((item) => item.id === response.data.id ? response.data : item) } : current);
+      setNotice("A new invitation was sent.");
     } catch (caught) { setNotice((caught as ApiError).message); }
   }
 
@@ -149,7 +194,20 @@ export function GrowthWorkspace() {
       <div className="growth-layout">
         <section className="dashboard-panel hours-panel" aria-labelledby="hours-title"><header className="panel-heading"><div><h2 id="hours-title">Weekly opening hours</h2><span>{data.hours.timezone}</span></div><span>Public storefront</span></header><form onSubmit={(event) => void saveHours(event)}><div className="hours-list">{hoursDraft.map((hour, index) => <div className="hours-row" key={hour.weekday}><strong>{weekdays[hour.weekday] ?? `Day ${hour.weekday}`}</strong><label className="hours-closed"><input type="checkbox" checked={hour.closed} onChange={(event) => setHoursDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, closed: event.target.checked, opens_at: event.target.checked ? null : item.opens_at ?? "09:00", closes_at: event.target.checked ? null : item.closes_at ?? "17:00" } : item))} /> Closed</label><label><span>Opens</span><input type="time" value={hour.opens_at ?? ""} disabled={hour.closed} onChange={(event) => setHoursDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, opens_at: event.target.value } : item))} required={!hour.closed} /></label><label><span>Closes</span><input type="time" value={hour.closes_at ?? ""} disabled={hour.closed} onChange={(event) => setHoursDraft((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, closes_at: event.target.value } : item))} required={!hour.closed} /></label></div>)}</div><div className="exceptional-hours"><h3>Exceptional dates</h3><div className="closure-editor"><label>Date<input type="date" value={closureDate} onChange={(event) => setClosureDate(event.target.value)} /></label><label className="hours-closed"><input type="checkbox" checked={closureClosed} onChange={(event) => setClosureClosed(event.target.checked)} /> Closed all day</label><label>Opens<input type="time" value={closureOpens} disabled={closureClosed} onChange={(event) => setClosureOpens(event.target.value)} /></label><label>Closes<input type="time" value={closureCloses} disabled={closureClosed} onChange={(event) => setClosureCloses(event.target.value)} /></label><label className="closure-reason">Reason<input value={closureReason} maxLength={200} onChange={(event) => setClosureReason(event.target.value)} placeholder="Holiday or team event" /></label><button className="button button--outline" type="button" onClick={addClosure}>Stage date</button></div>{closuresDraft.length ? <ul>{closuresDraft.map((closure) => <li key={closure.date}><span><strong>{closure.date}</strong><small>{closure.closed ? "Closed" : `${closure.opens_at}–${closure.closes_at}`}{closure.reason ? ` · ${closure.reason}` : ""}</small></span><button type="button" onClick={() => setClosuresDraft((current) => current.filter((item) => item.date !== closure.date))}>Remove</button></li>)}</ul> : <p>No exceptional dates staged.</p>}</div><button className="button button--primary" type="submit">Save hours & closures</button></form></section>
 
-        <section className="dashboard-panel team-panel" id="team" aria-labelledby="team-title"><header className="panel-heading"><div><h2 id="team-title">Team</h2><span>{data.team.length} of {data.quota} seats used</span></div><span>{Math.max(0, data.quota - data.team.length)} available</span></header>{data.team.length ? <ul>{data.team.map((member) => <li key={member.id}><span className="team-monogram">{initials(member.user.name)}</span><span><strong>{member.user.name}</strong><small>{member.job_title ?? member.roles[0]?.name ?? "Team member"} · {member.user.email}</small></span><em className={`status-chip status-chip--${member.status}`}>{member.status}</em>{member.status === "invited" ? <button type="button" onClick={() => void updateMember(member, "active")}>Activate</button> : member.status === "active" ? <button type="button" onClick={() => void updateMember(member, "inactive")}>Deactivate</button> : <button type="button" onClick={() => void updateMember(member, "active")}>Reactivate</button>}</li>)}</ul> : <p className="panel-empty">No team members are visible yet.</p>}<form className="team-invite" onSubmit={(event) => void invite(event)}><h3>Invite a team member</h3><label>Name<input name="name" minLength={2} maxLength={160} required /></label><label>Email<input name="email" type="email" required /></label><label>Job title<input name="job_title" maxLength={120} /></label><label>Role<select name="role_slug" defaultValue="agent">{roles.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="button button--outline" type="submit" disabled={data.team.length >= data.quota}>{data.team.length >= data.quota ? "Team quota reached" : "Create invitation"}</button></form></section>
+        <section className="dashboard-panel team-panel" id="team" aria-labelledby="team-title">
+          <header className="panel-heading"><div><h2 id="team-title">Team</h2><span>{data.team.filter((member) => member.status !== "inactive").length} of {data.quota} seats used</span></div><span>{Math.max(0, data.quota - data.team.filter((member) => member.status !== "inactive").length)} available</span></header>
+          {data.team.length ? <ul>{data.team.map((member) => <li key={member.id}>
+            <span className="team-monogram">{initials(member.user.name)}</span>
+            <span><strong>{member.user.name}</strong><small>{member.job_title ?? member.roles[0]?.name ?? "Team member"} · {member.user.email}</small>{member.invitation_expires_at ? <small>Invitation expires {formatDate(member.invitation_expires_at)}</small> : null}</span>
+            <em className={`status-chip status-chip--${member.status}`}>{member.status}</em>
+            <div className="team-member-actions">
+              {member.status === "invited" ? <><button type="button" onClick={() => void resendInvitation(member)}>Resend</button><button type="button" onClick={() => void cancelInvitation(member)}>Cancel</button></> : null}
+              {member.status === "active" ? <><label><input type="checkbox" checked={member.is_public} onChange={(event) => void updatePublicVisibility(member, event.target.checked)} /> Public profile</label><button type="button" onClick={() => void deactivateMember(member)}>Deactivate</button></> : null}
+              {member.status === "inactive" ? <button type="button" onClick={() => void reinvite(member)}>Send new invite</button> : null}
+            </div>
+          </li>)}</ul> : <p className="panel-empty">No team members have been added yet.</p>}
+          <form className="team-invite" onSubmit={(event) => void invite(event)}><h3>Invite a team member</h3><label>Name<input name="name" minLength={2} maxLength={160} required /></label><label>Email<input name="email" type="email" required /></label><label>Job title<input name="job_title" maxLength={120} /></label><label>Role<select name="role_slug" defaultValue="agent">{roles.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="button button--outline" type="submit" disabled={data.team.filter((member) => member.status !== "inactive").length >= data.quota}>{data.team.filter((member) => member.status !== "inactive").length >= data.quota ? "Team quota reached" : "Create invitation"}</button></form>
+        </section>
 
         <section className="dashboard-panel campaign-panel" aria-labelledby="campaign-title"><header className="panel-heading"><div><h2 id="campaign-title">Newsletter campaigns</h2><span>Draft and send from one verified record</span></div><span>{newslettersEnabled ? "Enabled" : "Unavailable"}</span></header>{!newslettersEnabled ? <div className="feature-disabled"><Icon name="mail" /><h3>Newsletters are not enabled</h3><p>{data.newsletterError?.message ?? "This agency’s current feature configuration does not include newsletter campaigns."}</p><small>No draft or send action is simulated while the feature is disabled.</small></div> : <><form className="campaign-composer" onSubmit={(event) => void createCampaign(event)}><label>Subject<input name="subject" minLength={2} maxLength={200} required /></label><label>Message<textarea name="body" minLength={2} maxLength={50000} required /></label><button className="button button--primary" type="submit">Save draft</button></form>{data.campaigns.length ? <ol className="campaign-history">{data.campaigns.map((campaign) => <CampaignRow campaign={campaign} key={campaign.id} onSave={updateCampaign} onSend={sendCampaign} />)}</ol> : <p className="panel-empty">No campaigns yet. Save the first draft above.</p>}</>}</section>
       </div>
@@ -170,4 +228,4 @@ function CampaignRow({ campaign, onSave, onSend }: { campaign: Campaign; onSave:
 }
 function GrowthMetric({ value, label }: { value: number; label: string }) { return <div><i className="signal-dot" /><strong>{value.toLocaleString()}</strong><small>{label}</small></div>; }
 function initials(name: string): string { return name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase(); }
-function formatDate(value: string): string { return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function formatDate(value: string): string { return localizedDate(value, { dateStyle: "medium", timeStyle: "short" }); }

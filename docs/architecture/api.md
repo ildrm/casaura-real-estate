@@ -10,7 +10,7 @@
 - Authentication: Sanctum secure cookie for the first-party web app; scoped bearer tokens for future native/partner clients.
 - Tenant selection: `Agency-ID` request header, verified against active membership on every private agency route.
 - Idempotency: `Idempotency-Key` required for imports, uploads, billing, lead creation, and other replay-sensitive writes.
-- Traceability: accept/return `Request-ID`; generate one if absent.
+- Traceability: accept/return a UUID `Request-ID`, generate one if absent, and return the immutable `Release-ID`.
 - Errors: stable machine code plus message, field errors, and request ID. Never expose stack traces or secret-bearing upstream responses.
 - Pagination: cursor links and metadata; offset pagination only for small admin reference lists.
 - Concurrency: mutable resources expose an ETag/version and reject stale writes with `409` or `412`.
@@ -19,17 +19,20 @@
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| GET | `/health` | public | API/database readiness summary |
-| POST | `/auth/register` | public/rate-limited | Register consumer account |
-| POST | `/auth/register-agency` | public/flagged/rate-limited | Atomically create owner, agency, membership, role, and subscription |
-| POST | `/auth/login` | public/rate-limited | Rotate session and return principal |
+| GET | `/health/live`, `/health/ready` | public | Process liveness and dependency/heartbeat readiness without internal detail |
+| POST | `/auth/register` | public/flagged/rate-limited | Register a consented consumer account; disabled in the GA launch profile |
+| POST | `/auth/register-agency` | public/flagged/rate-limited | Atomically create a consented owner, agency, membership, role, and subscription |
+| POST | `/auth/login` | public/rate-limited | Rotate session, enforce verification/MFA policy, and return principal |
+| POST | `/auth/forgot-password`, `/auth/reset-password` | public/rate-limited | Non-enumerating recovery and credential/session rotation |
+| GET/POST | `/auth/email/...` | user/signed/rate-limited | Deliver and consume signed verification links |
+| POST/DELETE | `/auth/mfa/...` | verified user | TOTP setup/challenge/disable and one-time recovery codes |
+| POST | `/auth/invitations/{token}/accept` | public/rate-limited | Accept a single-use, expiring agency invitation |
 | POST | `/auth/logout` | user | Invalidate session/token |
 | GET | `/me` | user | Principal, memberships, permissions, active entitlements |
 | GET | `/agencies/{agency}` | public | Public safe agency projection |
 | GET | `/agency` | user + tenant | Current agency workspace projection |
 | PATCH | `/agency` | `agency.manage_profile` | Update current agency profile |
 | GET | `/agency/members` | `agency.manage_members` | Tenant-scoped membership list |
-| POST | `/agency/members` | `agency.manage_members` | Invite/create membership |
 | GET | `/agency/feature-flags` | member | Effective flags/entitlements, without internal rules |
 
 ## Phase 2 endpoint map
@@ -60,9 +63,12 @@ Public routes use a dedicated search limiter and return only the allowlisted sea
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | GET | `/public/search` | public | Full-text, hard-filter, sort, bounds, and radius search with cursor pagination |
+| GET | `/public/discovery` | public | Stable published listing/storefront identifiers for sitemap generation |
 | GET | `/public/listings/{listing}` | public | Published listing detail, safe agency projection, public media links, history, similar inventory, and caller-specific engagement state |
 | GET | `/public/media/{media}/{kind}` | public | Stream an active published listing's `thumbnail` or `display` WebP derivative without revealing storage keys |
 | GET | `/account/engagements` | user | Current account's favorite, liked, and disliked published listing cards |
+| GET/POST | `/account/privacy/requests` | user | List or request encrypted exports and reviewed deletion |
+| GET | `/account/privacy/requests/{request}/download` | subject user | Checksum-verified, expiring JSON export |
 | PUT | `/account/favorites/{listing}` | user | Idempotently favorite a published listing |
 | DELETE | `/account/favorites/{listing}` | user | Idempotently remove a favorite |
 | PUT | `/account/reactions/{listing}` | user | Set or replace the private `like`/`dislike` state |
@@ -92,7 +98,8 @@ Future endpoint families follow resource boundaries: `/collections`, `/viewings`
 | --- | --- | --- | --- |
 | GET | `/public/agencies/{slug}` | public | Feature-gated safe storefront with team, hours, and published inventory |
 | GET/PUT | `/agency/opening-hours` | member / `agency.manage_profile` | Read or atomically replace weekly hours and closures |
-| GET/POST/PATCH | `/agency/team[/{member}]` | `agency.manage_members` | Quota-bound invite, activation, title, and safe agency-role assignment |
+| GET/POST/PATCH | `/agency/team[/{member}]` | `agency.manage_members` | Quota-bound invite, status, public visibility, title, and safe agency-role assignment |
+| POST/DELETE | `/agency/team/{member}/invitation` | `agency.manage_members` | Rotate/resend or cancel a pending invitation |
 | POST | `/public/agencies/{agency}/newsletter/subscriptions` | public, newsletter limiter | Idempotent consent capture with opaque unsubscribe token |
 | DELETE | `/public/newsletter/subscriptions/{token}` | public, newsletter limiter | Idempotent token-scoped unsubscribe |
 | GET/POST/PATCH | `/agency/newsletter/campaigns[/{campaign}]` | `agency.manage_profile` | Feature-gated draft campaign operations |
@@ -111,7 +118,61 @@ Future endpoint families follow resource boundaries: `/collections`, `/viewings`
 | GET | `/admin/audit-logs` | platform `audit.view` | Cursor-paginate redacted immutable audit metadata |
 | GET | `/admin/health` | platform `audit.view` | Safe database, queue, failed-job, and search-backlog projection |
 
-Later endpoint families continue to follow resource boundaries: `/collections`, `/integrations`, provider operations, billing, and AI. Administrator APIs use explicit `/admin` routes and never share broad internal serializers with public APIs.
+## Phase 7 endpoint map
+
+Every integration route is tenant-scoped, requires `integration.configure`, and uses
+the integrations limiter. Secret values are supplied only by named secret reference;
+the API never returns secret content.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET/POST | `/integrations/connections` | List or create a tenant RESO connection with rights/resource configuration |
+| GET/PATCH/DELETE | `/integrations/connections/{connection}` | Read, version-update, disable, or re-enable an owned connection |
+| GET | `/integrations/connections/{connection}/metadata` | Discover bounded live RESO resources and fields before mapping |
+| GET/POST | `/integrations/connections/{connection}/mappings` | List or activate a versioned declarative field mapping |
+| GET/POST | `/integrations/connections/{connection}/syncs` | List jobs or enqueue an idempotent full/incremental sync |
+| GET | `/integrations/syncs/{sync}` | Poll a tenant-owned asynchronous sync projection |
+| GET | `/integrations/import-errors` | Review redacted validation/quarantine outcomes |
+| GET/PATCH | `/integrations/duplicate-candidates[/{candidate}]` | Review, link/merge, reject, or reverse uncertain source matches |
+
+## Phase 8 endpoint map
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET/POST | `/account/collections` | verified user | List or create private collections |
+| GET/PATCH/DELETE | `/account/collections/{collection}` | owner/member policy | Read, rename, or delete an authorized collection |
+| PUT/PATCH/DELETE | `/account/collections/{collection}/items` | owner/editor policy | Idempotently add, atomically reorder, or remove published listings |
+| POST/DELETE | `/account/collections/{collection}/members[...]` | owner policy | Create expiring invitations or revoke a collaborator |
+| POST | `/account/collection-invitations/{token}/accept` | matching verified user | Atomically accept a single-use invitation |
+| GET | `/public/compare` | public | Compare 2–5 published, public-safe listing projections |
+| GET/POST/DELETE | `/account/comparisons[...]` | verified user | List, idempotently save, or delete private comparison history |
+| GET | `/public/listings/{listing}/recommendations` | public | Deterministic organic recommendations; sponsored records are excluded |
+| GET | `/public/map-layers` | public | Privacy-thresholded clusters/price bands from public coordinates |
+| GET | `/public/market-analytics` | public | Privacy-thresholded single-currency market aggregates |
+
+## Phase 9 endpoint map
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| POST | `/ai/search` | public, AI limiter/flag | Return schema-validated proposed filters, public results, and grounded citations |
+| POST | `/ai/comparisons` | public, AI limiter/flag | Explain only the supplied public comparison facts with citations |
+| GET/DELETE | `/account/ai-sessions[/{session}]` | subject user | List or delete the caller's retained AI sessions |
+| POST | `/account/ai-generations/{generation}/feedback` | subject user | Record bounded useful/not-useful feedback |
+| POST | `/listings/{listing}/ai-suggestions` | tenant + `listing.update` | Generate a version-bound listing-copy suggestion without mutating the listing |
+| POST | `/listings/{listing}/ai-suggestions/{suggestion}/apply` | tenant + `listing.update` | Human-select fields and apply only against the unchanged source version |
+| GET | `/admin/ai-safety-events` | platform `audit.view` | Inspect redacted refusal/safety metadata without prompt contents |
+
+## Phase 10 endpoint map
+
+| Method | Path | Access | Purpose |
+| --- | --- | --- | --- |
+| GET | `/billing` | tenant + `billing.manage` | Project subscription, available plans, entitlements, invoices, and active policies |
+| POST | `/billing/checkout-sessions` | tenant + `billing.manage`, idempotency | Create Stripe-hosted subscription Checkout with automatic tax |
+| POST | `/billing/portal-sessions` | tenant + `billing.manage`, idempotency | Create a Stripe-hosted customer portal session |
+| POST | `/webhooks/stripe` | public signed webhook limiter | Verify, deduplicate, order, and project allowlisted billing events |
+| GET/POST/PATCH | `/billing/promotion-campaigns[/{campaign}]` | tenant + `billing.manage` | Operate eligible, scheduled, capped tenant campaigns |
+| GET | `/public/sponsored-listings` | public | Return labeled paid inventory separately from organic search/recommendations |
+| GET/POST/PATCH | `/admin/promotion-policies[/{policy}]` | platform `platform.settings` | List and version immutable promotion policy families |
 
 ## Example error
 
@@ -121,17 +182,32 @@ Later endpoint families continue to follow resource boundaries: `/collections`, 
     "code": "TENANT_ACCESS_DENIED",
     "message": "You do not have access to this agency.",
     "fields": {},
-    "request_id": "01J..."
+    "request_id": "d829dee2-b77d-4ef7-bcbb-a738dc1e6f7b"
   }
 }
 ```
 
 ## Security behavior
 
-- Login, registration, password reset, uploads, comments, messages, search, AI, and public API each use separate named limiters.
+- Login, registration, password reset, uploads, messages, search, leads, newsletters, reports, and engagement use scoped named limiters.
 - State-changing cookie-authenticated requests require CSRF protection; same-site cookies are secure in production.
 - Public serializers never expose legal documents, private coordinates, member emails, billing state, credentials, or moderation notes.
 - Policies run on every object action; route-model binding alone is not authorization.
-- Support impersonation requires an audited, time-limited grant and a visible UI banner.
+- Support impersonation is not implemented and no production role is granted equivalent bypass authority.
+
+## Production behavior
+
+All authenticated operational routes require an active principal and verified identity;
+privileged memberships/platform roles additionally require an MFA-upgraded session.
+Tenant routes resolve active membership before object lookup and then enforce the named
+permission and centralized entitlement. Public inquiry writes persist versioned consent
+evidence and use a uniqueness constraint plus payload hash to make concurrent replays safe.
+
+Production boot fails on insecure origins, cookies, CORS, secrets, database/cache/queue,
+object storage, malware scanning, mail, logging, or incomplete live RESO/OpenAI/Stripe
+configuration. Local newsletter delivery, deterministic provider adapters, and destructive
+OpenSearch reset are unavailable in production. Stripe webhook traffic uses a dedicated
+limiter and stores only an event hash plus an allowlisted summary. The exact Laravel route
+and OpenAPI method sets are compared by the automated test suite.
 
 The executable contract is [OpenAPI](../../packages/contracts/openapi.yaml).

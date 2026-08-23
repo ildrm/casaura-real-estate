@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Notifications\NotificationDispatcher;
 use App\Domain\Tenancy\AuditRecorder;
+use App\Domain\Tenancy\FeatureResolver;
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,9 +14,12 @@ use Illuminate\Support\Str;
 
 class ConversationController extends Controller
 {
+    public function __construct(private readonly FeatureResolver $features) {}
+
     public function messages(Request $request, string $conversation): JsonResponse
     {
         $record = $this->authorized($request, $conversation);
+        $this->ensureMessagingEnabled($record);
         $query = DB::table('messages')->where('conversation_id', $record->id)->orderBy('created_at')->orderBy('id');
         if ($after = $request->query('after')) {
             $cursor = DB::table('messages')->where('conversation_id', $record->id)->where('id', $after)->first();
@@ -38,6 +43,7 @@ class ConversationController extends Controller
         AuditRecorder $audit,
     ): JsonResponse {
         $record = $this->authorized($request, $conversation);
+        $this->ensureMessagingEnabled($record);
         $validated = $request->validate(['body' => ['required', 'string', 'min:1', 'max:5000']]);
         $messageId = (string) Str::uuid7();
         $now = now();
@@ -98,6 +104,12 @@ class ConversationController extends Controller
         }
 
         return $conversation;
+    }
+
+    private function ensureMessagingEnabled(object $conversation): void
+    {
+        $agency = Agency::query()->findOrFail($conversation->agency_id);
+        $this->features->ensureEnabled('messaging', $agency);
     }
 
     private function agencyMember(string $userId, string $agencyId, bool $requirePermission = false): bool

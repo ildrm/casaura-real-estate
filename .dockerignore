@@ -1,0 +1,28 @@
+# Keep the build context limited to files consumed by the production images.
+**
+!package.json
+!package-lock.json
+!apps/
+!apps/api/
+!apps/api/**
+!apps/web/
+!apps/web/**
+!infra/
+!infra/docker/
+!infra/docker/**
+
+# Never send local dependencies, build output, test artifacts, or secrets.
+**/node_modules/
+**/vendor/
+**/.next/
+**/test-results/
+**/playwright-report/
+**/.phpunit.cache/
+**/*.sqlite
+**/*.sqlite-*
+**/.env
+**/.env.*
+apps/api/bootstrap/cache/**
+apps/api/storage/**
+apps/api/tests/
+apps/api/phpunit.xml

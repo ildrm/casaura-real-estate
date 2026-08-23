@@ -7,7 +7,8 @@ import { apiMutation, type ApiError } from "@/lib/api-client";
 
 type PrincipalResponse = {
   data: {
-    memberships: Array<{ agency: { id: string } }>;
+    email_verified_at: string | null;
+    memberships: Array<{ status: "invited" | "active" | "inactive"; agency: { id: string } }>;
   };
 };
 
@@ -28,12 +29,21 @@ export function SignInForm({ nextPath = "/agency/dashboard" }: { nextPath?: stri
         password: String(form.get("password") ?? ""),
         remember: form.get("remember") === "on",
       });
-      const agencyId = response.data.memberships.at(0)?.agency.id;
+      const agencyId = response.data.memberships.find((membership) => membership.status === "active")?.agency.id;
       if (agencyId) window.localStorage.setItem("casaura.activeAgencyId", agencyId);
-      router.push(nextPath.startsWith("/") ? nextPath : "/agency/dashboard");
+      router.push(response.data.email_verified_at ? (nextPath.startsWith("/") ? nextPath : "/agency/dashboard") : "/verify-email");
       router.refresh();
     } catch (caught) {
-      setError(caught as ApiError);
+      const apiError = caught as ApiError;
+      if (apiError.code === "MFA_REQUIRED") {
+        router.push(`/mfa-challenge?next=${encodeURIComponent(nextPath.startsWith("/") ? nextPath : "/agency/dashboard")}`);
+        return;
+      }
+      if (apiError.code === "MFA_SETUP_REQUIRED") {
+        router.push("/mfa/setup");
+        return;
+      }
+      setError(apiError);
     } finally {
       setPending(false);
     }
@@ -54,7 +64,7 @@ export function SignInForm({ nextPath = "/agency/dashboard" }: { nextPath?: stri
       </label>
       <div className="form-options">
         <label className="check-field"><input name="remember" type="checkbox" /> <span>Keep me signed in</span></label>
-        <Link href="mailto:support@casaura.test?subject=Password%20help">Forgot password?</Link>
+        <Link href="/forgot-password">Forgot password?</Link>
       </div>
       <button className="button button--primary auth-submit" type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}

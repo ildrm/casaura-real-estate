@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand/logo";
+import { useWorkspaceSession } from "@/components/dashboard/workspace-session";
 import { Icon } from "@/components/ui/icon";
 import { activeAgencyId, apiMutation, apiQuery, type ApiError } from "@/lib/api-client";
 import type { ListingProjection, MediaProjection, PropertyCatalog, QualityCheck } from "@/lib/listing-types";
+import { publicConfig } from "@/lib/public-config";
 
 type EditorState = {
   intent: "sale" | "rent";
@@ -37,9 +39,9 @@ type SaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";
 
 const steps = ["Basics", "Location", "Details", "Features", "Media", "Review"] as const;
 const initialState: EditorState = {
-  intent: "sale", propertyType: "house", price: "", currency: "USD", reference: "",
-  bedrooms: "", bathrooms: "", interiorArea: "", areaUnit: "sq_ft", title: "", description: "",
-  line1: "", line2: "", locality: "", region: "", postalCode: "", countryCode: "US",
+  intent: "sale", propertyType: "house", price: "", currency: publicConfig.currency, reference: "",
+  bedrooms: "", bathrooms: "", interiorArea: "", areaUnit: publicConfig.areaUnit, title: "", description: "",
+  line1: "", line2: "", locality: "", region: "", postalCode: "", countryCode: publicConfig.countryCode,
   yearBuilt: "", parkingSpaces: "", energyRating: "", furnished: false, amenities: [],
 };
 
@@ -50,12 +52,12 @@ function fromListing(listing: ListingProjection): EditorState {
     intent: listing.intent,
     propertyType: listing.property.property_type.slug,
     price: listing.price ? String(listing.price.amount_minor / 100) : "",
-    currency: listing.price?.currency ?? "USD",
+    currency: listing.price?.currency ?? publicConfig.currency,
     reference: listing.reference,
     bedrooms: listing.property.bedrooms === null ? "" : String(listing.property.bedrooms),
     bathrooms: listing.property.bathrooms === null ? "" : String(listing.property.bathrooms),
-    interiorArea: listing.property.interior_area === null ? "" : String(listing.property.interior_area.sq_ft),
-    areaUnit: "sq_ft",
+    interiorArea: listing.property.interior_area === null ? "" : String(listing.property.interior_area[publicConfig.areaUnit]),
+    areaUnit: publicConfig.areaUnit,
     title: listing.title ?? "",
     description: listing.description ?? "",
     line1: address?.line_1 ?? "",
@@ -63,7 +65,7 @@ function fromListing(listing: ListingProjection): EditorState {
     locality: address?.locality ?? "",
     region: address?.region ?? "",
     postalCode: address?.postal_code ?? "",
-    countryCode: address?.country_code ?? "US",
+    countryCode: address?.country_code ?? publicConfig.countryCode,
     yearBuilt: features.year_built === undefined ? "" : String(features.year_built),
     parkingSpaces: features.parking_spaces === undefined ? "" : String(features.parking_spaces),
     energyRating: features.energy_rating === undefined ? "" : String(features.energy_rating),
@@ -80,6 +82,7 @@ function numberOrNull(value: string): number | null {
 
 export function ListingEditor({ initialListingId }: { initialListingId?: string }) {
   const router = useRouter();
+  const { membership } = useWorkspaceSession();
   const [listingId, setListingId] = useState(initialListingId ?? null);
   const [version, setVersion] = useState<number | null>(null);
   const [listingStatus, setListingStatus] = useState<ListingProjection["status"]>("draft");
@@ -94,6 +97,11 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
   const saveInFlight = useRef<Promise<ListingProjection | null> | null>(null);
+  const canUpdate = membership.permissions.includes("listing.update");
+  const canPublish = membership.permissions.includes("listing.publish");
+  const canDelete = membership.permissions.includes("listing.delete");
+  const canManageMedia = membership.permissions.includes("media.manage");
+  const editable = canUpdate && ["draft", "changes_requested"].includes(listingStatus);
 
   const applyListing = useCallback((listing: ListingProjection) => {
     setListingId(listing.id);
@@ -182,6 +190,7 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
   }, [state]);
 
   const save = useCallback(async (force = false): Promise<ListingProjection | null> => {
+    if (!editable) return null;
     if (saveInFlight.current) return saveInFlight.current;
     if (!force && !dirty) return null;
     if (!state.reference.trim() || !state.propertyType) {
@@ -220,7 +229,7 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
     })();
     saveInFlight.current = operation;
     return operation;
-  }, [applyListing, dirty, listingId, requestBody, router, state.propertyType, state.reference, version]);
+  }, [applyListing, dirty, editable, listingId, requestBody, router, state.propertyType, state.reference, version]);
 
   useEffect(() => {
     if (!dirty || loading) return;
@@ -265,6 +274,7 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
   }
 
   async function submitForReview() {
+    if (!canUpdate) return;
     const saved = await save(true);
     const id = saved?.id ?? listingId;
     const agencyId = activeAgencyId();
@@ -280,6 +290,67 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
       setMessage(error.message);
       setSaveStatus("error");
     }
+  }
+
+  async function transition(action: "publish" | "request-changes" | "withdraw") {
+    const agencyId = activeAgencyId();
+    if (!listingId || !agencyId || !canPublish) return;
+    let body: Record<string, unknown> = {};
+    if (action === "request-changes") {
+      const note = window.prompt("Describe the changes required before publication:")?.trim();
+      if (!note) return;
+      body = { note };
+    }
+    if (action === "withdraw" && !window.confirm("Withdraw this listing from every public surface?")) return;
+    try {
+      const response = await apiMutation<{ data: ListingProjection }>(`/api/v1/listings/${listingId}/${action}`, body, { agencyId });
+      applyListing(response.data);
+      setMessage(action === "publish" ? "Listing published." : action === "withdraw" ? "Listing withdrawn from public discovery." : "Changes requested and recorded in history.");
+      setSaveStatus("saved");
+    } catch (caught) {
+      setMessage((caught as ApiError).message);
+      setSaveStatus("error");
+    }
+  }
+
+  async function deleteListing() {
+    const agencyId = activeAgencyId();
+    if (!listingId || !agencyId || !canDelete || !window.confirm("Delete this listing and its private draft data? This cannot be undone.")) return;
+    try {
+      await apiMutation(`/api/v1/listings/${listingId}`, {}, { method: "DELETE", agencyId });
+      router.replace("/agency/properties");
+      router.refresh();
+    } catch (caught) {
+      setMessage((caught as ApiError).message);
+      setSaveStatus("error");
+    }
+  }
+
+  async function deleteMedia(item: MediaProjection) {
+    const agencyId = activeAgencyId();
+    if (!listingId || !agencyId || !canManageMedia || !window.confirm(`Delete ${item.original_name}?`)) return;
+    try {
+      await apiMutation(`/api/v1/listings/${listingId}/media/${item.id}`, {}, { method: "DELETE", agencyId });
+      setMedia((current) => current.filter((mediaItem) => mediaItem.id !== item.id));
+      await refreshListing();
+      setMessage("Photo deleted.");
+    } catch (caught) { setMessage((caught as ApiError).message); setSaveStatus("error"); }
+  }
+
+  async function moveMedia(item: MediaProjection, offset: -1 | 1) {
+    const agencyId = activeAgencyId();
+    if (!listingId || !agencyId || !canManageMedia) return;
+    const currentIndex = media.findIndex((candidate) => candidate.id === item.id);
+    const destination = currentIndex + offset;
+    if (currentIndex < 0 || destination < 0 || destination >= media.length) return;
+    const next = [...media];
+    [next[currentIndex], next[destination]] = [next[destination], next[currentIndex]];
+    try {
+      const response = await apiMutation<{ data: MediaProjection[] }>(`/api/v1/listings/${listingId}/media/order`, { media_ids: next.map((candidate) => candidate.id) }, { method: "PATCH", agencyId });
+      setMedia(response.data);
+      await refreshListing();
+      setMessage("Photo order updated.");
+    } catch (caught) { setMessage((caught as ApiError).message); setSaveStatus("error"); }
   }
 
   const saveLabel = saveStatus === "saving" ? "Saving draft…"
@@ -303,7 +374,14 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
       <header className="listing-editor-topbar">
         <BrandMark />
         <span className={`autosave-state autosave-state--${saveStatus}`} aria-live="polite"><Icon name={saveStatus === "error" || saveStatus === "conflict" ? "shield" : "check"} /> {saveLabel}</span>
-        <div><button className="button button--outline" type="button" onClick={() => void save(true)} disabled={saveStatus === "saving"}>Save draft</button><button className="button button--primary" type="button" disabled={!quality.ready_for_review || listingStatus === "in_review" || listingStatus === "published"} onClick={() => void submitForReview()}>{listingStatus === "in_review" ? "In review" : listingStatus === "published" ? "Published" : "Submit for review"}</button><Link href="/agency/properties" className="editor-close" aria-label="Close listing editor">×</Link></div>
+        <div className="listing-lifecycle-actions">
+          {editable ? <button className="button button--outline" type="button" onClick={() => void save(true)} disabled={saveStatus === "saving"}>Save draft</button> : null}
+          {editable ? <button className="button button--primary" type="button" disabled={!quality.ready_for_review || !canUpdate} onClick={() => void submitForReview()}>Submit for review</button> : null}
+          {listingStatus === "in_review" && canPublish ? <><button className="button button--outline" type="button" onClick={() => void transition("request-changes")}>Request changes</button><button className="button button--primary" type="button" onClick={() => void transition("publish")}>Publish</button></> : null}
+          {listingStatus === "published" && canPublish ? <button className="button button--outline" type="button" onClick={() => void transition("withdraw")}>Withdraw</button> : null}
+          {listingId && listingStatus !== "published" && canDelete ? <button className="button button--danger" type="button" onClick={() => void deleteListing()}>Delete</button> : null}
+          <Link href="/agency/properties" className="editor-close" aria-label="Close listing editor">×</Link>
+        </div>
       </header>
 
       <div className="listing-editor-layout">
@@ -311,18 +389,21 @@ export function ListingEditor({ initialListingId }: { initialListingId?: string 
 
         <main className="editor-canvas">
           {message ? <div className={saveStatus === "saved" ? "editor-notice editor-notice--success" : "editor-notice"} role={saveStatus === "saved" ? "status" : "alert"}>{message}</div> : null}
-          {step === 0 ? <BasicsStep state={state} update={update} catalog={catalog} onContinue={() => setStep(1)} /> : null}
-          {step === 1 ? <LocationStep state={state} update={update} onBack={() => setStep(0)} onContinue={() => setStep(2)} /> : null}
-          {step === 2 ? <DetailsStep state={state} update={update} onBack={() => setStep(1)} onContinue={() => setStep(3)} /> : null}
-          {step === 3 ? <FeaturesStep state={state} update={update} catalog={catalog} onBack={() => setStep(2)} onContinue={() => setStep(4)} /> : null}
-          {step === 4 ? <MediaStep media={media} uploading={uploading} onUpload={uploadFiles} onBack={() => setStep(3)} onContinue={() => setStep(5)} /> : null}
-          {step === 5 ? <ReviewStep state={state} quality={quality} status={listingStatus} onBack={() => setStep(4)} onSubmit={submitForReview} /> : null}
+          {!editable ? <div className="editor-notice editor-notice--success" role="status">This listing is read-only in its current <strong>{listingStatus.replaceAll("_", " ")}</strong> state. Use an available lifecycle action above.</div> : null}
+          <fieldset className="editor-state-fieldset" disabled={!editable}>
+            {step === 0 ? <BasicsStep state={state} update={update} catalog={catalog} onContinue={() => setStep(1)} /> : null}
+            {step === 1 ? <LocationStep state={state} update={update} onBack={() => setStep(0)} onContinue={() => setStep(2)} /> : null}
+            {step === 2 ? <DetailsStep state={state} update={update} onBack={() => setStep(1)} onContinue={() => setStep(3)} /> : null}
+            {step === 3 ? <FeaturesStep state={state} update={update} catalog={catalog} onBack={() => setStep(2)} onContinue={() => setStep(4)} /> : null}
+            {step === 4 ? <MediaStep media={media} uploading={uploading} canManage={canManageMedia} onUpload={uploadFiles} onDelete={deleteMedia} onMove={moveMedia} onBack={() => setStep(3)} onContinue={() => setStep(5)} /> : null}
+            {step === 5 ? <ReviewStep state={state} quality={quality} status={listingStatus} onBack={() => setStep(4)} onSubmit={submitForReview} /> : null}
+          </fieldset>
         </main>
 
         <QualityInspector quality={quality} />
       </div>
 
-      <footer className="editor-mobile-actions"><button className="button button--outline" type="button" onClick={() => void save(true)}>Save draft</button>{step < steps.length - 1 ? <button className="button button--primary" type="button" onClick={() => setStep((current) => current + 1)}>Continue</button> : <button className="button button--primary" type="button" disabled={!quality.ready_for_review} onClick={() => void submitForReview()}>Submit for review</button>}</footer>
+      {editable ? <footer className="editor-mobile-actions"><button className="button button--outline" type="button" onClick={() => void save(true)}>Save draft</button>{step < steps.length - 1 ? <button className="button button--primary" type="button" onClick={() => setStep((current) => current + 1)}>Continue</button> : <button className="button button--primary" type="button" disabled={!quality.ready_for_review || !canUpdate} onClick={() => void submitForReview()}>Submit for review</button>}</footer> : <footer className="editor-mobile-actions">{listingStatus === "in_review" && canPublish ? <><button className="button button--outline" type="button" onClick={() => void transition("request-changes")}>Request changes</button><button className="button button--primary" type="button" onClick={() => void transition("publish")}>Publish</button></> : null}{listingStatus === "published" && canPublish ? <button className="button button--outline" type="button" onClick={() => void transition("withdraw")}>Withdraw</button> : null}{listingId && listingStatus !== "published" && canDelete ? <button className="button button--danger" type="button" onClick={() => void deleteListing()}>Delete</button> : null}</footer>}
     </div>
   );
 }
@@ -334,11 +415,11 @@ function BasicsStep({ state, update, catalog, onContinue }: StepProps & { catalo
     <fieldset className="intent-control"><legend>Listing intent</legend><label className={state.intent === "sale" ? "is-selected" : undefined}><input type="radio" name="intent" checked={state.intent === "sale"} onChange={() => update("intent", "sale")} /><Icon name="home" /> For sale</label><label className={state.intent === "rent" ? "is-selected" : undefined}><input type="radio" name="intent" checked={state.intent === "rent"} onChange={() => update("intent", "rent")} /><Icon name="building" /> For rent</label></fieldset>
     <div className="editor-form-grid">
       <label>Property type<select value={state.propertyType} onChange={(event) => update("propertyType", event.target.value)}>{catalog?.property_types.map((type) => <option value={type.slug} key={type.slug}>{type.name}</option>) ?? <option value="house">House</option>}</select></label>
-      <div className="price-field"><label htmlFor="editor-price">Price</label><div><select aria-label="Currency" value={state.currency} onChange={(event) => update("currency", event.target.value)}><option>USD</option><option>EUR</option><option>GBP</option></select><input id="editor-price" inputMode="decimal" value={state.price} onChange={(event) => update("price", event.target.value)} placeholder="1,395,000" /></div></div>
+      <div className="price-field"><label htmlFor="editor-price">Price</label><div><select aria-label="Currency" value={state.currency} onChange={(event) => update("currency", event.target.value)}><option>{state.currency}</option></select><input id="editor-price" inputMode="decimal" value={state.price} onChange={(event) => update("price", event.target.value)} placeholder="1,395,000" /></div></div>
       <label className="editor-span-2">Reference ID<input value={state.reference} onChange={(event) => update("reference", event.target.value.toUpperCase().replace(/[^A-Z0-9._-]/g, ""))} placeholder="GR-241-OKD" maxLength={100} /></label>
       <label>Bedrooms<input type="number" min="0" max="100" value={state.bedrooms} onChange={(event) => update("bedrooms", event.target.value)} /></label>
       <label>Bathrooms<input type="number" min="0" max="100" step="0.5" value={state.bathrooms} onChange={(event) => update("bathrooms", event.target.value)} /></label>
-      <div className="area-field"><label htmlFor="editor-area">Interior area</label><div><input id="editor-area" type="number" min="0" value={state.interiorArea} onChange={(event) => update("interiorArea", event.target.value)} /><select aria-label="Area unit" value={state.areaUnit} onChange={(event) => update("areaUnit", event.target.value as EditorState["areaUnit"])}><option value="sq_ft">sq ft</option><option value="sqm">sqm</option></select></div></div>
+      <div className="area-field"><label htmlFor="editor-area">Interior area</label><div><input id="editor-area" type="number" min="0" value={state.interiorArea} onChange={(event) => update("interiorArea", event.target.value)} /><select aria-label="Area unit" value={state.areaUnit} onChange={(event) => update("areaUnit", event.target.value as EditorState["areaUnit"])}><option value={state.areaUnit}>{state.areaUnit === "sqm" ? "m²" : "sq ft"}</option></select></div></div>
       <label className="editor-span-3">Short title<input maxLength={160} value={state.title} onChange={(event) => update("title", event.target.value)} /><small>{state.title.length} / 160</small></label>
       <label className="editor-span-3">Description<textarea rows={6} maxLength={10000} value={state.description} onChange={(event) => update("description", event.target.value)} /><small>{state.description.length} characters · minimum 80 for review</small></label>
     </div>
@@ -353,7 +434,7 @@ function LocationStep({ state, update, onBack, onContinue }: StepProps & { onBac
     <label>City or locality<input autoComplete="address-level2" value={state.locality} onChange={(event) => update("locality", event.target.value)} /></label>
     <label>State or region<input autoComplete="address-level1" value={state.region} onChange={(event) => update("region", event.target.value)} /></label>
     <label>Postal code<input autoComplete="postal-code" value={state.postalCode} onChange={(event) => update("postalCode", event.target.value)} /></label>
-    <label>Country<select value={state.countryCode} onChange={(event) => update("countryCode", event.target.value)}><option value="US">United States</option><option value="CA">Canada</option><option value="GB">United Kingdom</option><option value="DE">Germany</option></select></label>
+    <label>Country code<select value={state.countryCode} onChange={(event) => update("countryCode", event.target.value)}><option value={state.countryCode}>{state.countryCode}</option></select></label>
   </div><StepActions onBack={onBack} onContinue={onContinue} continueLabel="Continue to details" /></section>;
 }
 
@@ -370,8 +451,8 @@ function FeaturesStep({ state, update, catalog, onBack, onContinue }: StepProps 
   return <section className="editor-step-panel" aria-labelledby="features-heading"><header><h1 id="features-heading">Choose amenities</h1><p>Select only features that are present and can be verified.</p></header><fieldset className="amenity-grid"><legend>Property amenities</legend>{catalog?.amenities.map((amenity) => <label className={state.amenities.includes(amenity.slug) ? "is-selected" : undefined} key={amenity.slug}><input type="checkbox" checked={state.amenities.includes(amenity.slug)} onChange={(event) => update("amenities", event.target.checked ? [...state.amenities, amenity.slug] : state.amenities.filter((slug) => slug !== amenity.slug))} /><Icon name="check" /><span>{amenity.name}<small>{amenity.group}</small></span></label>)}</fieldset><StepActions onBack={onBack} onContinue={onContinue} continueLabel="Continue to media" /></section>;
 }
 
-function MediaStep({ media, uploading, onUpload, onBack, onContinue }: { media: MediaProjection[]; uploading: boolean; onUpload: (files: FileList | null) => void; onBack: () => void; onContinue: () => void }) {
-  return <section className="editor-step-panel" aria-labelledby="media-heading"><header><h1 id="media-heading">Show the property clearly</h1><p>Upload accurate, well-lit photos. Files are validated before private storage.</p></header><label className="media-drop"><input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={uploading || media.length >= 30} onChange={(event) => onUpload(event.target.files)} /><span className="metric-icon"><Icon name="building" /></span><strong>{uploading ? "Validating and creating derivatives…" : "Upload photos"}</strong><small>JPG, PNG or WebP · up to 15 MB · {media.length} of 30 photos</small></label>{media.length ? <ol className="media-file-list">{media.map((item) => <li key={item.id}><span><Icon name="check" /></span><b>{item.original_name}<small>{item.width} × {item.height} · {(item.byte_size / 1024).toFixed(0)} KB</small></b></li>)}</ol> : <p className="editor-empty">No photos uploaded yet. Five are required before review.</p>}<StepActions onBack={onBack} onContinue={onContinue} continueLabel="Review listing" /></section>;
+function MediaStep({ media, uploading, canManage, onUpload, onDelete, onMove, onBack, onContinue }: { media: MediaProjection[]; uploading: boolean; canManage: boolean; onUpload: (files: FileList | null) => void; onDelete: (item: MediaProjection) => void; onMove: (item: MediaProjection, offset: -1 | 1) => void; onBack: () => void; onContinue: () => void }) {
+  return <section className="editor-step-panel" aria-labelledby="media-heading"><header><h1 id="media-heading">Show the property clearly</h1><p>Upload accurate, well-lit photos. Files are validated before private storage.</p></header><label className="media-drop"><input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={!canManage || uploading || media.length >= 30} onChange={(event) => onUpload(event.target.files)} /><span className="metric-icon"><Icon name="building" /></span><strong>{uploading ? "Validating and creating derivatives…" : canManage ? "Upload photos" : "Media management permission required"}</strong><small>JPG, PNG or WebP · up to 15 MB · {media.length} of 30 photos</small></label>{media.length ? <ol className="media-file-list">{media.map((item, index) => <li key={item.id}><span><Icon name="check" /></span><b>{item.original_name}<small>{item.width} × {item.height} · {(item.byte_size / 1024).toFixed(0)} KB</small></b><div className="media-file-actions"><button type="button" disabled={!canManage || index === 0} onClick={() => void onMove(item, -1)} aria-label={`Move ${item.original_name} earlier`}>↑</button><button type="button" disabled={!canManage || index === media.length - 1} onClick={() => void onMove(item, 1)} aria-label={`Move ${item.original_name} later`}>↓</button><button type="button" disabled={!canManage} onClick={() => void onDelete(item)}>Delete</button></div></li>)}</ol> : <p className="editor-empty">No photos uploaded yet. Five are required before review.</p>}<StepActions onBack={onBack} onContinue={onContinue} continueLabel="Review listing" /></section>;
 }
 
 function ReviewStep({ state, quality, status, onBack, onSubmit }: { state: EditorState; quality: ListingProjection["quality"]; status: ListingProjection["status"]; onBack: () => void; onSubmit: () => void }) {

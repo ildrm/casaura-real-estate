@@ -84,6 +84,9 @@ export type TeamMember = {
   id: string;
   status: "invited" | "active" | "inactive";
   job_title: string | null;
+  invitation_expires_at: string | null;
+  is_public: boolean;
+  public_position: number | null;
   user: { id: string; name: string; email: string };
   roles: Array<{ id: string; name: string; slug: string }>;
 };

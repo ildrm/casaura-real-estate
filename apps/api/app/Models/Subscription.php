@@ -13,6 +13,8 @@ class Subscription extends Model
     protected $fillable = [
         'agency_id', 'plan_id', 'status', 'billing_status', 'promotional_starts_at',
         'promotional_ends_at', 'trial_ends_at', 'free_until', 'current_period_ends_at',
+        'provider', 'provider_customer_id', 'provider_subscription_id', 'provider_updated_at',
+        'cancel_at', 'canceled_at',
     ];
 
     public function agency(): BelongsTo
@@ -33,6 +35,9 @@ class Subscription extends Model
             'trial_ends_at' => 'datetime',
             'free_until' => 'datetime',
             'current_period_ends_at' => 'datetime',
+            'provider_updated_at' => 'datetime',
+            'cancel_at' => 'datetime',
+            'canceled_at' => 'datetime',
         ];
     }
 }

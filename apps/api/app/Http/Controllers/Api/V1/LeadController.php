@@ -67,6 +67,19 @@ class LeadController extends Controller
                 throw new ApiException('LEAD_ASSIGNEE_INVALID', 'Select an active member of this agency.');
             }
         }
+        if (isset($validated['status']) && $validated['status'] !== $current->status) {
+            $allowed = [
+                'new' => ['contacted', 'viewing', 'lost'],
+                'contacted' => ['qualified', 'viewing', 'won', 'lost'],
+                'qualified' => ['viewing', 'won', 'lost'],
+                'viewing' => ['qualified', 'won', 'lost'],
+                'won' => [],
+                'lost' => [],
+            ];
+            if (! in_array($validated['status'], $allowed[$current->status] ?? [], true)) {
+                throw new ApiException('LEAD_TRANSITION_INVALID', 'This lead status transition is not allowed.', 409);
+            }
+        }
 
         DB::transaction(function () use ($request, $lead, $tenant, $audit, $analytics, $validated, $current): void {
             $changes = array_intersect_key($validated, array_flip(['status', 'priority', 'assigned_member_id']));
@@ -88,7 +101,9 @@ class LeadController extends Controller
                 DB::table('lead_status_history')->insert([
                     'id' => (string) Str::uuid(), 'lead_id' => $lead, 'actor_user_id' => $request->user()->id,
                     'from_assigned_member_id' => $current->assigned_member_id,
-                    'to_assigned_member_id' => $changes['assigned_member_id'] ?? $current->assigned_member_id,
+                    'to_assigned_member_id' => array_key_exists('assigned_member_id', $changes)
+                        ? $changes['assigned_member_id']
+                        : $current->assigned_member_id,
                     'from_status' => $current->status, 'to_status' => $changes['status'] ?? $current->status,
                     'note' => $validated['note'] ?? null, 'created_at' => now(),
                 ]);

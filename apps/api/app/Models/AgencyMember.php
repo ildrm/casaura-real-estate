@@ -12,8 +12,12 @@ class AgencyMember extends Model
     use HasUuids;
 
     protected $fillable = [
-        'agency_id', 'user_id', 'status', 'job_title', 'invited_at', 'accepted_at',
+        'agency_id', 'user_id', 'status', 'job_title', 'invited_by_user_id',
+        'invitation_token_hash', 'invitation_expires_at', 'invitation_cancelled_at',
+        'invited_user_was_created', 'is_public', 'public_position', 'invited_at', 'accepted_at',
     ];
+
+    protected $hidden = ['invitation_token_hash'];
 
     public function agency(): BelongsTo
     {
@@ -23,6 +27,11 @@ class AgencyMember extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function invitedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'invited_by_user_id');
     }
 
     public function roles(): BelongsToMany
@@ -53,6 +62,11 @@ class AgencyMember extends Model
         return [
             'invited_at' => 'datetime',
             'accepted_at' => 'datetime',
+            'invitation_expires_at' => 'datetime',
+            'invitation_cancelled_at' => 'datetime',
+            'invited_user_was_created' => 'boolean',
+            'is_public' => 'boolean',
+            'public_position' => 'integer',
         ];
     }
 }

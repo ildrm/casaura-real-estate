@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\AgencyMember;
 use App\Models\FeatureFlag;
 use App\Models\FeatureFlagOverride;
 use App\Models\PlanEntitlement;
@@ -28,6 +29,8 @@ class AgencyProductTest extends TestCase
         $this->createPublishedListing($owner, $agency, ['reference' => 'STOREFRONT-LISTING']);
         $this->actAsAgencyOwner($owner);
         $this->putJson('/api/v1/agency/opening-hours', ['hours' => $this->validHours()], $this->agencyHeaders($agency))->assertOk();
+        AgencyMember::query()->where('agency_id', $agency->id)->where('user_id', $owner->id)
+            ->update(['is_public' => true]);
 
         $content = $this->getJson("/api/v1/public/agencies/{$agency->slug}")->assertOk()
             ->assertJsonPath('data.agency.slug', $agency->slug)

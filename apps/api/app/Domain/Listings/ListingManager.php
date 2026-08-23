@@ -5,8 +5,10 @@ namespace App\Domain\Listings;
 use App\Domain\Search\PublicListingProjector;
 use App\Domain\Search\PublicLocationPolicy;
 use App\Domain\Tenancy\AuditRecorder;
+use App\Domain\Tenancy\FeatureResolver;
 use App\Domain\Tenancy\TenantContext;
 use App\Models\Address;
+use App\Models\Agency;
 use App\Models\Amenity;
 use App\Models\Listing;
 use App\Models\ListingStatusHistory;
@@ -32,6 +34,7 @@ final class ListingManager
         private readonly AuditRecorder $audit,
         private readonly PublicLocationPolicy $publicLocation,
         private readonly PublicListingProjector $projector,
+        private readonly FeatureResolver $features,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -39,6 +42,13 @@ final class ListingManager
     {
         try {
             return DB::transaction(function () use ($request, $data): Listing {
+                $agency = Agency::query()->whereKey($this->tenant->id())->lockForUpdate()->firstOrFail();
+                $this->features->ensureEnabled('listing_creation', $agency);
+                $quota = $this->features->quota('listing_creation', $agency);
+                if ($quota !== null && Listing::query()->where('agency_id', $agency->id)->count() >= $quota) {
+                    throw new ListingException('LISTING_QUOTA_EXCEEDED', 'The active plan listing quota has been reached.');
+                }
+
                 $type = PropertyType::query()->where('slug', $data['property_type_slug'])->where('is_active', true)->firstOrFail();
                 $address = isset($data['address']) ? $this->createAddress($data['address']) : null;
                 $property = Property::query()->create([
@@ -161,6 +171,99 @@ final class ListingManager
             }
             $this->appendVersion($listing, $request->user()->id);
             $this->audit->record($request, 'listing.updated', $listing, $before, $this->snapshotter->snapshot($listing), $this->tenant->id());
+
+            return $listing;
+        });
+    }
+
+    /**
+     * Apply a validated provider delta without bypassing tenant ownership,
+     * history, audit, or public-search projection invariants.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function syncFromProvider(Request $request, Listing $listing, array $data): Listing
+    {
+        return DB::transaction(function () use ($request, $listing, $data): Listing {
+            $listing = $this->lock($listing->id);
+            $before = $this->snapshotter->snapshot($listing);
+            $oldPrice = [$listing->price_amount_minor, $listing->price_currency];
+            $fromStatus = $listing->status;
+
+            $listing->fill(Arr::only($data, ['reference', 'intent', 'title', 'description']));
+            if (array_key_exists('title', $data)) {
+                $listing->slug = Str::slug($data['title'] ?: 'property') ?: 'property';
+            }
+            if (array_key_exists('price', $data)) {
+                $listing->price_amount_minor = data_get($data, 'price.amount_minor');
+                $listing->price_currency = strtoupper((string) data_get($data, 'price.currency', 'USD'));
+            }
+
+            $property = $listing->property;
+            if (isset($data['property_type_slug'])) {
+                $property->property_type_id = PropertyType::query()
+                    ->where('slug', $data['property_type_slug'])->where('is_active', true)->firstOrFail()->id;
+            }
+            foreach (['bedrooms', 'bathrooms'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $property->{$field} = $data[$field];
+                }
+            }
+            if (array_key_exists('interior_area', $data)) {
+                $property->interior_area_sqm = $this->areaInSquareMetres($data['interior_area']);
+            }
+            if (array_key_exists('address', $data)) {
+                $this->updateAddress($property, $data['address']);
+            }
+            $property->save();
+
+            PropertyIdentifier::query()->updateOrCreate([
+                'property_id' => $property->id,
+                'scheme' => 'agency_reference',
+            ], [
+                'value' => $data['reference'],
+                'source' => 'provider',
+            ]);
+
+            $providerStatus = mb_strtolower((string) ($data['_provider_status'] ?? 'active'));
+            $withdrawn = in_array($providerStatus, [
+                'canceled', 'cancelled', 'closed', 'deleted', 'expired', 'withdrawn',
+            ], true);
+            if ($withdrawn && $listing->status === 'published') {
+                $listing->status = 'withdrawn';
+                $listing->withdrawn_at = now();
+            }
+
+            $listing->version++;
+            $listing->save();
+            $listing = $this->refreshQuality($listing);
+            if ($oldPrice !== [$listing->price_amount_minor, $listing->price_currency] && $listing->price_amount_minor !== null) {
+                $this->appendPrice($listing, $request->user()->id);
+            }
+            if ($fromStatus !== $listing->status) {
+                ListingStatusHistory::query()->create([
+                    'listing_id' => $listing->id,
+                    'from_status' => $fromStatus,
+                    'to_status' => $listing->status,
+                    'actor_user_id' => $request->user()->id,
+                    'note' => 'Provider lifecycle synchronization',
+                    'created_at' => now(),
+                ]);
+            }
+            $this->appendVersion($listing, $request->user()->id);
+            $this->audit->record(
+                $request,
+                $fromStatus !== $listing->status ? 'listing.provider_withdrawn' : 'listing.provider_updated',
+                $listing,
+                $before,
+                $this->snapshotter->snapshot($listing),
+                $this->tenant->id(),
+            );
+            if ($listing->status === 'published') {
+                $this->projector->enqueue($listing, 'upsert');
+            } elseif ($fromStatus === 'published') {
+                $this->projector->enqueue($listing, 'delete');
+            }
 
             return $listing;
         });

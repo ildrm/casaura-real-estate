@@ -44,19 +44,33 @@ class PublicLeadController extends Controller
             return response()->json(['data' => $this->projection($existing)], 200);
         }
 
-        $lead = DB::transaction(function () use ($request, $validated, $document, $listing, $idempotencyKey, $payloadHash, $notifications, $audit, $analytics): object {
+        [$lead, $created] = DB::transaction(function () use ($request, $validated, $document, $listing, $idempotencyKey, $payloadHash, $notifications, $audit, $analytics): array {
             $now = now();
             $leadId = (string) Str::uuid();
             $conversationId = (string) Str::uuid();
-            DB::table('leads')->insert([
+            $inserted = DB::table('leads')->insertOrIgnore([
                 'id' => $leadId, 'agency_id' => $document->agency_id, 'listing_id' => $listing,
                 'consumer_user_id' => $request->user()?->id, 'idempotency_key' => $idempotencyKey,
                 'payload_hash' => $payloadHash, 'name' => $validated['name'],
                 'email' => mb_strtolower($validated['email']), 'phone' => $validated['phone'] ?? null,
-                'message' => $validated['message'], 'status' => 'new', 'priority' => 'normal',
+                'message' => $validated['message'],
+                'consent_version' => config('privacy.inquiry_consent_version'),
+                'consent_text' => config('privacy.inquiry_consent_text'),
+                'consent_text_sha256' => hash('sha256', (string) config('privacy.inquiry_consent_text')),
+                'consented_at' => $now,
+                'status' => 'new', 'priority' => 'normal',
                 'version' => 1, 'response_due_at' => $now->copy()->addHours(4),
                 'last_activity_at' => $now, 'created_at' => $now, 'updated_at' => $now,
             ]);
+            if ($inserted !== 1) {
+                $existing = DB::table('leads')->where('agency_id', $document->agency_id)
+                    ->where('idempotency_key', $idempotencyKey)->firstOrFail();
+                if (! hash_equals($existing->payload_hash, $payloadHash)) {
+                    throw new ApiException('IDEMPOTENCY_CONFLICT', 'This idempotency key was already used for another inquiry.', 409);
+                }
+
+                return [$existing, false];
+            }
             DB::table('lead_status_history')->insert([
                 'id' => (string) Str::uuid(), 'lead_id' => $leadId, 'actor_user_id' => $request->user()?->id,
                 'from_status' => null, 'to_status' => 'new', 'created_at' => $now,
@@ -87,10 +101,10 @@ class PublicLeadController extends Controller
             ], $document->agency_id);
             $analytics->recordOutcome($document->agency_id, 'lead.created', $listing, ['status' => 'new']);
 
-            return DB::table('leads')->where('id', $leadId)->first();
+            return [DB::table('leads')->where('id', $leadId)->first(), true];
         });
 
-        return response()->json(['data' => $this->projection($lead)], 201);
+        return response()->json(['data' => $this->projection($lead)], $created ? 201 : 200);
     }
 
     /** @return array<string, mixed> */

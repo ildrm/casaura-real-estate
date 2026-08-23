@@ -123,6 +123,12 @@ final class OpenSearchBackend implements SearchBackend
 
     public function reset(): void
     {
+        if (! app()->runningInConsole() || ! config('search.allow_destructive_reset')) {
+            throw new SearchException(
+                'SEARCH_RESET_NOT_AUTHORIZED',
+                'Destructive OpenSearch reset requires an explicitly authorized maintenance job.',
+            );
+        }
         $this->request()->delete($this->index());
         $response = $this->request()->put($this->index(), ['mappings' => ['properties' => [
             'listing_id' => ['type' => 'keyword'],

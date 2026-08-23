@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { publicConfig } from "@/lib/public-config";
+
+const API_URL = publicConfig.apiUrl;
 
 export type ApiError = {
   code: string;
@@ -47,8 +49,8 @@ export async function apiMutation<T>(
     body: body instanceof FormData ? body : JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: ApiError } | null;
+  const payload = (await response.json().catch(() => null)) as ({ error?: ApiError } & T) | null;
+  if (!response.ok || payload?.error) {
     throw payload?.error ?? {
       code: "REQUEST_FAILED",
       message: "The request could not be completed. Please try again.",
@@ -57,7 +59,7 @@ export async function apiMutation<T>(
 
   if (response.status === 204) return undefined as T;
 
-  return (await response.json()) as T;
+  return payload as T;
 }
 
 export async function apiQuery<T>(path: string, agencyId?: string): Promise<T> {
@@ -69,15 +71,15 @@ export async function apiQuery<T>(path: string, agencyId?: string): Promise<T> {
     },
   });
 
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: ApiError } | null;
+  const payload = (await response.json().catch(() => null)) as ({ error?: ApiError } & T) | null;
+  if (!response.ok || payload?.error) {
     throw payload?.error ?? {
       code: "REQUEST_FAILED",
       message: "The request could not be completed. Please try again.",
     } satisfies ApiError;
   }
 
-  return (await response.json()) as T;
+  return payload as T;
 }
 
 export function activeAgencyId(): string | null {

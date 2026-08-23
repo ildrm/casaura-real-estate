@@ -5,13 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { publicAssetUrl } from "@/lib/api-client";
+import { formatArea, formatMoney } from "@/lib/localization";
 import type { PublicListingCard } from "@/lib/public-marketplace-types";
 
 export function formatListingPrice(listing: PublicListingCard): string {
   if (!listing.price) return "Price on request";
-  const value = new Intl.NumberFormat("en-US", {
-    style: "currency", currency: listing.price.currency, maximumFractionDigits: 0,
-  }).format(listing.price.amount_minor / 100);
+  const value = formatMoney(listing.price.amount_minor, listing.price.currency);
   return listing.intent === "rent" ? `${value} / mo` : value;
 }
 
@@ -27,7 +26,7 @@ export function PublicPropertyCard({ listing, selected = false, onSelect, hideFa
     <Link className="public-property-card__body" href={listing.url}>
       <div className="public-property-card__price"><strong>{formatListingPrice(listing)}</strong><span>For {listing.intent === "sale" ? "sale" : "rent"}</span></div>
       <h2>{listing.title}</h2>
-      <div className="public-property-card__facts" aria-label="Property facts"><span>{listing.bedrooms ?? "—"} bd</span><span>{listing.bathrooms ?? "—"} ba</span><span>{listing.interior_area ? `${listing.interior_area.sq_ft.toLocaleString()} sq ft` : "Area not set"}</span></div>
+      <div className="public-property-card__facts" aria-label="Property facts"><span>{listing.bedrooms ?? "—"} bd</span><span>{listing.bathrooms ?? "—"} ba</span><span>{listing.interior_area ? formatArea(listing.interior_area) : "Area not set"}</span></div>
       <p>{listing.location.policy === "approximate" ? "Approx. " : ""}{listing.location.label}</p>
       <footer><span><Icon name="shield" /> {listing.agency.name}</span>{listing.agency.verified ? <b>Verified</b> : null}</footer>
     </Link>

@@ -5,8 +5,9 @@ import { Icon } from "@/components/ui/icon";
 const navigation = [
   { label: "Buy", href: "/search?intent=buy" },
   { label: "Rent", href: "/search?intent=rent" },
-  { label: "Explore", href: "/search" },
-  { label: "Agencies", href: "/#agencies" },
+  { label: "Find an agency", href: "/#agencies" },
+  { label: "Market insights", href: "/market" },
+  { label: "Property assistant", href: "/assistant" },
 ];
 
 export function SiteHeader() {

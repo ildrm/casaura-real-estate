@@ -10,4 +10,6 @@ interface MediaStorage
     public function delete(array $keys): void;
 
     public function move(string $from, string $to): void;
+
+    public function exists(string $key): bool;
 }

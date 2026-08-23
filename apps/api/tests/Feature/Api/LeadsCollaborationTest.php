@@ -3,8 +3,11 @@
 namespace Tests\Feature\Api;
 
 use App\Models\AgencyMember;
+use App\Models\Role;
 use App\Models\User;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\CreatesAgencyTenant;
@@ -87,6 +90,33 @@ class LeadsCollaborationTest extends TestCase
             ->assertUnprocessable()->assertJsonPath('error.code', 'LEAD_ASSIGNEE_INVALID');
     }
 
+    /** P1 workflow AC-2. */
+    public function test_lead_transitions_are_explicit_and_clearing_assignment_is_recorded_as_null(): void
+    {
+        [$owner, $agency] = $this->createAgencyOwner();
+        $listing = $this->createPublishedListing($owner, $agency, ['reference' => 'LEAD-TRANSITIONS']);
+        $leadId = $this->postJson("/api/v1/public/listings/{$listing['id']}/leads", $this->inquiryPayload(), [
+            'Idempotency-Key' => 'lead-transition',
+        ])->assertCreated()->json('data.id');
+        $ownerMember = AgencyMember::query()->where('agency_id', $agency->id)->where('user_id', $owner->id)->firstOrFail();
+        $this->actAsAgencyOwner($owner);
+
+        $this->patchJson("/api/v1/leads/{$leadId}", ['status' => 'won', 'version' => 1], $this->agencyHeaders($agency))
+            ->assertConflict()->assertJsonPath('error.code', 'LEAD_TRANSITION_INVALID');
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'status' => 'new', 'version' => 1]);
+
+        $this->patchJson("/api/v1/leads/{$leadId}", [
+            'status' => 'contacted', 'assigned_member_id' => $ownerMember->id, 'version' => 1,
+        ], $this->agencyHeaders($agency))->assertOk()->assertJsonPath('data.version', 2);
+        $this->patchJson("/api/v1/leads/{$leadId}", [
+            'assigned_member_id' => null, 'version' => 2,
+        ], $this->agencyHeaders($agency))->assertOk()->assertJsonPath('data.assigned_member_id', null);
+
+        $history = DB::table('lead_status_history')->where('lead_id', $leadId)->latest('created_at')->firstOrFail();
+        $this->assertSame($ownerMember->id, $history->from_assigned_member_id);
+        $this->assertNull($history->to_assigned_member_id);
+    }
+
     /** Phase 4 AC-5; EC-5, EC-6. */
     public function test_messages_are_cursor_pollable_and_participant_scoped(): void
     {
@@ -163,6 +193,14 @@ class LeadsCollaborationTest extends TestCase
 
         Sanctum::actingAs($consumer);
         $this->getJson('/api/v1/account/collaboration')->assertOk()->assertJsonPath('data.viewings.0.id', $viewing['id']);
+
+        $analyst = User::factory()->create();
+        $analystMember = AgencyMember::query()->create([
+            'agency_id' => $agency->id, 'user_id' => $analyst->id, 'status' => 'active', 'accepted_at' => now(),
+        ]);
+        $analystMember->roles()->attach(Role::query()->where('slug', 'agency_analyst')->firstOrFail());
+        Sanctum::actingAs($analyst);
+        $this->get("/api/v1/viewings/{$viewing['id']}/calendar", $this->agencyHeaders($agency))->assertNotFound();
     }
 
     /** Phase 4 AC-9; EC-9. */
@@ -193,6 +231,18 @@ class LeadsCollaborationTest extends TestCase
         Sanctum::actingAs(User::factory()->create());
         $this->getJson('/api/v1/notifications')->assertOk()->assertJsonCount(0, 'data');
         $this->patchJson("/api/v1/notifications/{$notificationId}", ['read' => true])->assertNotFound();
+    }
+
+    /** P1 workflow AC-4. */
+    public function test_due_reminder_dispatch_is_registered_as_a_singleton_minute_schedule(): void
+    {
+        $events = collect($this->app->make(Schedule::class)->events());
+        $event = $events->first(fn ($candidate) => str_contains($candidate->command ?? '', 'reminders:dispatch'));
+
+        $this->assertNotNull($event);
+        $this->assertSame('* * * * *', $event->expression);
+        $this->assertTrue($event->withoutOverlapping);
+        $this->assertTrue($event->onOneServer);
     }
 
     /** Phase 4 AC-10. */

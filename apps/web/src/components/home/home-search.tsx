@@ -36,7 +36,7 @@ export function HomeSearch() {
           <button className="button button--primary" type="submit">
             Search homes
           </button>
-          <Link className="conversational-link" href="/search?mode=natural-language">
+          <Link className="conversational-link" href="/assistant">
             <Icon name="message" />
             Try conversational search
           </Link>

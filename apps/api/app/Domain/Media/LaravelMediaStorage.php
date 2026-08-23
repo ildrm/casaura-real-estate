@@ -38,4 +38,9 @@ final class LaravelMediaStorage implements MediaStorage
             throw new RuntimeException('Unable to quarantine the media object.');
         }
     }
+
+    public function exists(string $key): bool
+    {
+        return Storage::disk('listing_media')->exists($key);
+    }
 }

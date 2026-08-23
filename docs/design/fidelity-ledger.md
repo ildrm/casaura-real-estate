@@ -1,6 +1,6 @@
 # Visual fidelity and responsive acceptance ledger
 
-Reviewed through 2026-08-19 against the accepted Casaura marketplace, agency-dashboard, properties, and listing-editor concepts in this directory. The implementation was captured from the running Next.js application with Chromium at desktop, tablet, Pixel 7, 390-pixel, and 375-pixel viewports.
+Reviewed through 2026-08-23 against the accepted Casaura marketplace, agency-dashboard, properties, listing-editor, integrations, assistant, and billing concepts. The implementation was captured from the running Next.js application with Chromium at desktop, tablet, Pixel 7, 390-pixel, and 375-pixel viewports.
 
 | Comparison point | Marketplace result | Agency workspace result |
 | --- | --- | --- |
@@ -61,6 +61,38 @@ Reviewed through 2026-08-19 against the accepted Casaura marketplace, agency-das
 - Phase 3 acceptance inventory is generated through real E2E publication and intentionally contains unique test labels and tiny test images. Empty media areas stay neutral rather than substituting deceptive stock photography.
 - External newsletter delivery, calendar synchronization, and notification transports remain behind replaceable ports; local adapters provide deterministic development/test behavior until providers are selected.
 
+## Phase 7–10 fidelity ledger
+
+Reference concepts and their rationale are preserved in
+[phase-7-10](../architecture/design-reference/phase-7-10/README.md). The acceptance pass
+compared the desktop integrations, assistant, and billing screens plus the mobile
+integrations and assistant screens directly against the running implementation.
+
+| Comparison point | Accepted implementation result |
+| --- | --- |
+| Composition and layout | Integrations preserves the heading/action, four operational metrics, connection rail, mapping/activity/duplicate/error tabs, and detailed work panel. Assistant preserves the grounded conversation, results, source/collection rail, and fixed compare tray. Billing preserves plan, invoice, campaign, entitlement, and policy regions. Mobile stacks those regions in the same task order without body-level horizontal overflow. |
+| Hierarchy and typography | Editorial serif page/section headings, compact sans-serif operational labels, strong prices/counts, subdued provenance, and visible status/disclosure text follow the established Casaura scale. Dense source/mapping metadata wraps without dropping below the accepted readable control scale. |
+| Colors and surfaces | Forest actions/identity, sage success/grounding panels, restrained neutral borders, white work surfaces, and terracotta safety/sponsored accents remain consistent with the concepts. Elevation is reserved for input/action surfaces; operational tables stay structurally flat. |
+| Components and controls | Connection lifecycle, metadata discovery, mapping save, queued sync, duplicate decisions, collection add/manage, comparison save/delete, filter confirmation, grounded source links, feedback, listing suggestion apply, hosted billing actions, campaign creation, and policy controls are real API actions with loading/error/empty/disabled states. |
+| Interaction and responsive behavior | Desktop uses persistent agency/public navigation and supporting rails. Mobile collapses headers, stacks rails after primary content, turns records into bounded cards/rows, keeps workspace bottom navigation reachable, and retains the compare tray as a fixed decision control. Playwright verifies the primary Phase 7–10 flows at desktop and Pixel 7 widths and asserts no body overflow. |
+
+### Phase 7–10 copy and behavior decisions
+
+- The assistant says **“Filters proposed—not applied”** and links to **“Confirm filters in search”** instead of the concept's “Filter confirmed.” This is an intentional safety requirement: a model response cannot silently change search state.
+- The assistant omits the concept's illustrative transit claims and market-context numbers when no grounded current source supports them. Sources show the listing and allowlisted field paths actually used.
+- The integration connection action is **“Disable”** rather than a generic edit affordance, matching the implemented reversible lifecycle. Credentials are represented by named secret references and never displayed.
+- Billing states **United States · USD · automatic tax is calculated on Stripe-hosted checkout** rather than implying a locally calculated or guaranteed tax result.
+- Sponsored inventory uses the required label and disclosure, and the billing screen repeats that paid placement does not alter organic ranking. Organic search/recommendations never embed paid rows.
+- Acceptance fixtures use real seeded API records and neutral/no-image states instead of fabricated listing photography or provider success. Generated concept imagery remains reference-only and is not shipped as customer data.
+
+### Phase 7–10 responsive decision ledger
+
+- The agency sidebar becomes compact header plus fixed bottom navigation; secondary workspace regions stack in task order.
+- Integration metrics remain bounded tiles; dense mappings become two-column source/target rows and wrap long RESO field names.
+- Assistant results become vertical property cards; sources and collections follow results, while the fixed compare tray keeps the 2–5 selection action visible.
+- Billing collapses the main/rail layout to plan, invoices, campaigns, entitlements, then policy; wide invoice content stays inside its own bounded scroll region when necessary.
+- Mobile full-page captures can show fixed navigation/trays over an intermediate screenshot position; in a real viewport they remain attached to the bottom edge and content retains scroll padding/reachability.
+
 ## Corrections made during acceptance
 
 - Disabled the hidden required consent checkbox during agency-registration step one so the form can progress and each step owns only its active constraints.
@@ -74,5 +106,7 @@ Reviewed through 2026-08-19 against the accepted Casaura marketplace, agency-das
 - Replaced seeded profile values with active-tenant loading, controlled edits, save/reload persistence, and explicit loading/error states.
 - Raised operational typography to the phase scale, expanded mobile controls and consent labels to accepted touch targets, and contained long dynamic storefront/property content at both 375 and 390 pixels.
 - Added editable custom-role permission synchronization and verified it with an authorized platform fixture.
+- Reduced the billing policy rail to the active policy plus a count of additional versions, preventing repeated E2E fixture policies from dominating the page.
+- Allowed assistant source metadata and integration timestamps to wrap/compact after the first Phase 7–10 visual pass.
 
 The required visual and interaction checks used installed Playwright Chromium. All accepted concept files and final desktop/mobile implementation captures were inspected in the same comparison passes. The required independent evaluator passed the revised implementation at 10/12 with no blockers; temporary services and capture scripts were stopped or removed after acceptance.

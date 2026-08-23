@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { BrandMark } from "@/components/brand/logo";
 import { Icon } from "@/components/ui/icon";
 import { apiMutation, apiQuery, type ApiError } from "@/lib/api-client";
+import { formatDate as localizedDate } from "@/lib/localization";
 import type { AdminHealth, AdminRole, AdminSetting, AuditLog, FeatureFlag, ModerationCase, Permission } from "@/lib/operations-types";
 
 type AdminData = {
@@ -111,7 +112,7 @@ export function AdminConsole() {
   }
 
   return <div className="admin-shell"><AdminHeader />{!data ? <main className="admin-state" role="status"><span className="inline-spinner" /><p>Platform operations</p><h1>Checking access and system state</h1><span>Loading health, moderation, configuration, roles, and audit projections.</span></main> : <main className="admin-canvas">
-    <header className="admin-heading"><div><p>Platform operations · redacted by design</p><h1>Casaura control room</h1></div><button className="button button--outline" type="button" onClick={() => void load()}><Icon name="sparkle" /> Refresh projections</button></header>
+    <header className="admin-heading"><div><p>Platform operations · redacted by design</p><h1>Casaura control room</h1></div><div className="admin-heading__actions"><Link className="button button--outline" href="/admin/release-controls">AI &amp; promotion controls</Link><button className="button button--outline" type="button" onClick={() => void load()}><Icon name="sparkle" /> Refresh projections</button></div></header>
     {data.health ? <HealthStrip health={data.health} /> : <p className="admin-partial-note"><Icon name="shield" /> Component health requires audit access.</p>}
     <nav className="admin-tabs" aria-label="Operations sections">{sections.filter((section) => access[section.id]).map((section) => <button type="button" key={section.id} className={active === section.id ? "is-active" : undefined} aria-pressed={active === section.id} onClick={() => setActive(section.id)}>{section.label}</button>)}</nav>
     <p className="async-notice" role="status" aria-live="polite">{notice}</p>
@@ -174,7 +175,7 @@ function AuditsSection({ audits }: { audits: AuditLog[] }) {
 }
 
 function titleCase(value: string): string { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function formatDate(value: string): string { return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function formatDate(value: string): string { return localizedDate(value, { dateStyle: "medium", timeStyle: "short" }); }
 async function safeAdminQuery<T>(path: string): Promise<{ value: T | null; error: ApiError | null }> {
   try { return { value: (await apiQuery<{ data: T }>(path)).data, error: null }; }
   catch (caught) { return { value: null, error: caught as ApiError }; }

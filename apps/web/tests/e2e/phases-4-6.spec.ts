@@ -1,27 +1,21 @@
 import { expect, test, type Page } from "@playwright/test";
+import { E2E_API_URL, registerVerifiedAgencyOwner } from "./support/identity";
 
-const API_URL = "http://localhost:8000";
+const API_URL = E2E_API_URL;
 
 async function registerAgency(page: Page, suffix: string): Promise<{ agencyId: string; slug: string; name: string }> {
   const name = `Signal House International Neighborhood Property Advisory ${suffix}`;
-  await page.goto("/register/agency");
-  await page.getByLabel("Agency name").fill(name);
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByLabel("Your name").fill("Avery Morgan");
-  await page.getByLabel("Work email").fill(`signal.${suffix}@example.com`);
-  await page.locator('input[name="password"]').fill("SecurePass123!");
-  await page.getByLabel("Confirm password").fill("SecurePass123!");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Create agency workspace" }).click();
-  await page.waitForURL(/\/agency\/dashboard$/);
-  const agencyId = await page.evaluate(() => localStorage.getItem("casaura.activeAgencyId"));
-  expect(agencyId).not.toBeNull();
+  const { agencyId } = await registerVerifiedAgencyOwner(page, {
+    agencyName: name,
+    email: `signal.${suffix}@example.com`,
+    ownerName: "Avery Morgan",
+  });
   const agency = await page.evaluate(async ({ apiUrl, id }) => {
     const response = await fetch(`${apiUrl}/api/v1/agency`, { credentials: "include", headers: { Accept: "application/json", "Agency-ID": id } });
     if (!response.ok) throw new Error(await response.text());
     return (await response.json()) as { data: { slug: string } };
-  }, { apiUrl: API_URL, id: agencyId as string });
-  return { agencyId: agencyId as string, slug: agency.data.slug, name };
+  }, { apiUrl: API_URL, id: agencyId });
+  return { agencyId, slug: agency.data.slug, name };
 }
 
 async function expectNoHorizontalOverflow(page: Page) {

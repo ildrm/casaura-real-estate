@@ -2,6 +2,10 @@
 
 ## Page and navigation map
 
+This is the implemented information architecture for the agency-first Phase 1–10
+release candidate. Live provider-dependent nodes remain feature-gated until their
+external activation checklists are approved.
+
 ```text
 Public
 ├── Home
@@ -10,6 +14,7 @@ Public
 │   ├── Search + map
 │   ├── Property detail
 │   ├── Compare
+│   ├── Property assistant
 │   ├── Cities / neighborhoods
 │   └── Developments
 ├── Professionals
@@ -36,7 +41,8 @@ Agency workspace
 ├── Leads / customers / viewings / messages
 ├── Newsletter / analytics
 ├── Team / agency profile
-├── Integrations / subscription
+├── RESO integrations / billing and promotion
+├── Listing assistant
 └── Settings
 
 Platform administration
@@ -44,8 +50,8 @@ Platform administration
 ├── Agencies / customers / properties / developments
 ├── Moderation / comments / ratings / reports / media
 ├── Taxonomy / locations / search / SEO / CMS
-├── Integrations / MLS-RESO / storage / Telegram / maps / AI
-├── Plans / payments / newsletters
+├── Integrations / MLS-RESO / storage / maps / AI safety
+├── Plans / billing / promotion policies / newsletters
 └── Roles / permissions / feature flags / settings
 ```
 
@@ -63,6 +69,12 @@ Legend: `A` all, `M` manage, `R` read, `O` assigned/owned only, `—` denied. Pe
 | `property.create` | — | M | M | O | M | — | — | R | M | A |
 | `property.publish` | — | M | M | O | O* | — | — | — | M | A |
 | `property.delete` | — | M | M | — | — | — | — | — | M | A |
+| `listing.view` | — | M | M | M | M | — | — | R | M | A |
+| `listing.create` | — | M | M | M | M | — | — | — | M | A |
+| `listing.update` | — | M | M | M | M | — | — | — | M | A |
+| `listing.publish` | — | M | M | — | — | — | — | — | M | A |
+| `listing.delete` | — | M | M | — | — | — | — | — | M | A |
+| `media.manage` | — | M | M | M | M | — | — | — | M | A |
 | `lead.manage` | — | M | M | O | — | R | — | R | M | A |
 | `analytics.view` | — | M | M | O | R | R | — | — | M | A |
 | `billing.manage` | — | M | — | — | — | — | — | — | M | A |
@@ -82,22 +94,22 @@ Resolution: emergency environment override → agency override → plan entitlem
 | Key | Launch default | Scopes | Phase | Notes |
 | --- | --- | --- | --- | --- |
 | `agency_registration` | on | env/global/agency | 1 | Can close acquisition without deployment |
-| `customer_registration` | on | env/global | 1 | Abuse/risk kill switch |
+| `customer_registration` | off | env/global | 1 | Remains off for the agency-first GA profile |
 | `agency_storefronts` | on | global/plan/agency | 1/5 | Public profile foundation in Phase 1 |
 | `team_management` | on | plan/agency | 1 | Quota comes from entitlement |
 | `listing_creation` | on | plan/agency | 2 | No hard-coded launch promotion |
 | `comments` | off | global/plan/agency | 3 | Moderation mode is separate setting |
 | `ratings` | off | global/agency | 3 | Property and agency ratings independent |
 | `likes` / `dislikes` | on | global/agency | 3 | Public counts are separate flags |
-| `comparisons` | on | global/plan | 8 | 2–5 properties |
-| `collaborative_collections` | on | global/plan | 8 | Invite policy configurable |
+| `comparisons` | entitled plan | global/plan | 8 | Private 2–5 property comparison and history |
+| `collaborative_collections` | entitled plan | global/plan | 8 | Ordered collections with single-use invitations and revocation |
 | `viewings` | on | global/plan/agency | 4 | Timezone-aware scheduling |
 | `messaging` | on | global/plan/agency | 4 | Reporting/rate limits required |
 | `newsletters` | off | env/global/plan/agency | 5 | Requires configured mail compliance |
 | `video` / `three_d` | off | global/plan/agency | 2/8 | Safe media pipeline and quotas |
-| `telegram_storage` | off | env/global/agency | 7 | Fallback storage is mandatory |
-| `mls` | off | env/global/plan/agency | 7 | Only when provider license exists |
-| `ai_search` | off | env/global/plan/agency | 9 | Deterministic parsed filters displayed |
-| `ai_listing_writer` | off | env/global/plan/agency | 9 | Human approval and provenance |
-| `sponsored_listings` | off | env/global/plan/agency | 10 | Always labeled; separate organic rank |
-| `payments` | off | env/global/plan/agency | 10 | Promotion dates and entitlements drive access |
+| `telegram_storage` | off | env/global/agency | 7 | Not part of the approved production launch profile |
+| `mls` | entitled plan; external gate | env/global/plan/agency | 7 | RESO adapter implemented; enable only after provider license/certification |
+| `ai_search` | entitled plan; external gate | env/global/plan/agency | 9 | Proposed filters require confirmation; enable after OpenAI acceptance |
+| `ai_listing_writer` | entitled plan; external gate | env/global/plan/agency | 9 | Version-bound human approval and provenance |
+| `sponsored_listings` | entitled plan; external gate | env/global/plan/agency | 10 | Always labeled and fetched separately from organic rank |
+| `payments` | entitled plan; external gate | env/global/plan/agency | 10 | Stripe-hosted billing; promotion dates and paid state drive access |

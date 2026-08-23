@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Search\PublicListingPresenter;
+use App\Domain\Tenancy\FeatureResolver;
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\Favorite;
 use App\Models\PropertyReaction;
 use App\Models\SearchDocument;
@@ -13,7 +15,10 @@ use Illuminate\Validation\Rule;
 
 class ConsumerEngagementController extends Controller
 {
-    public function __construct(private readonly PublicListingPresenter $presenter) {}
+    public function __construct(
+        private readonly PublicListingPresenter $presenter,
+        private readonly FeatureResolver $features,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -46,8 +51,10 @@ class ConsumerEngagementController extends Controller
 
     public function react(Request $request, string $listing): JsonResponse
     {
-        $this->publicListing($listing);
+        $document = $this->publicListing($listing);
         $validated = $request->validate(['reaction' => ['required', Rule::in(['like', 'dislike'])]]);
+        $agency = Agency::query()->findOrFail($document->agency_id);
+        $this->features->ensureEnabled($validated['reaction'] === 'like' ? 'likes' : 'dislikes', $agency);
         PropertyReaction::query()->updateOrCreate(
             ['user_id' => $request->user()->id, 'listing_id' => $listing],
             ['reaction' => $validated['reaction']],
