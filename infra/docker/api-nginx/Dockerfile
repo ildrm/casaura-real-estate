@@ -1,4 +1,4 @@
-FROM nginx:1.29.4-alpine3.23@sha256:4870c12cd2ca986de501a804b4f506ad3875a0b1874940ba0a2c7f763f1855b2
+FROM nginx:1.31.2-alpine3.23@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa
 
 RUN rm /etc/nginx/conf.d/default.conf
 COPY infra/docker/api-nginx/default.conf /etc/nginx/conf.d/default.conf
