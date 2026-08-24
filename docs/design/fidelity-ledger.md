@@ -1,6 +1,6 @@
 # Visual fidelity and responsive acceptance ledger
 
-Reviewed through 2026-08-23 against the accepted Casaura marketplace, agency-dashboard, properties, listing-editor, integrations, assistant, and billing concepts. The implementation was captured from the running Next.js application with Chromium at desktop, tablet, Pixel 7, 390-pixel, and 375-pixel viewports.
+Reviewed through 2026-08-24 against the accepted Casaura marketplace, agency-dashboard, properties, listing-editor, integrations, assistant, and billing concepts. The implementation was captured from the running Next.js application with Chromium at desktop, tablet, Pixel 7, 390-pixel, and 375-pixel viewports.
 
 | Comparison point | Marketplace result | Agency workspace result |
 | --- | --- | --- |

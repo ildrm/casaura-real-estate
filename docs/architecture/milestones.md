@@ -1,6 +1,6 @@
 # Delivery milestones and live checklist
 
-> **Last reconciled:** 2026-08-23  
+> **Last reconciled:** 2026-08-24  
 > **Current repository scope:** Phases 1–10 plus production release hardening are implemented and verified.  
 > **Release decision:** Engineering release candidate complete; production activation awaits the external launch gates below.
 
@@ -171,7 +171,7 @@ These snapshots preserve the evidence recorded when each phase closed. They are 
 - Quality: Laravel Pint, Composer validation/advisory audit, ESLint, TypeScript, the Next.js production build (18 routes), npm advisory audit, and repository diff checks passed. Dependency audits reported no known vulnerabilities.
 - Visual: the required independent frontend evaluation passed on round two at 10/12 with no blocking items after desktop/mobile screenshots, computed typography/touch checks, profile persistence, RBAC synchronization, and responsive overflow review.
 
-## Current production release-candidate verification — 2026-08-23
+## Current production release-candidate verification — 2026-08-24
 
 - Specifications: Phases 7–10 each passed the strict specification validator at 100/100 before implementation.
 - API: the complete Laravel suite passed with 101 tests and 1,149 assertions, including authorization/tenant negatives, entitlement enforcement, identity/MFA/revocation, RESO metadata and exact-replay ingestion, collection/comparison privacy, aggregate suppression, grounded-AI retry/redaction, Stripe webhook ordering/signatures, promotion isolation, the production guard, and exact OpenAPI route/method parity. Laravel Pint and strict Composer validation passed.

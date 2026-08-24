@@ -1,6 +1,6 @@
 # Production release plan and status
 
-Status date: 2026-08-23. The engineering release candidate is implemented in this
+Status date: 2026-08-24. The engineering release candidate is implemented in this
 repository. Production launch remains **no-go** until the external approvals and
 environment drills in the last section are completed on the selected hosting stack.
 
