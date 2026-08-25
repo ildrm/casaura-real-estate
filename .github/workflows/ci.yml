@@ -77,6 +77,8 @@ jobs:
         working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
+      - name: Create empty Laravel environment file
+        run: touch .env
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.5"

@@ -47,10 +47,10 @@ class ListingController extends Controller
         if (isset($validated['q'])) {
             $term = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $validated['q']).'%';
             $query->where(function ($builder) use ($term): void {
-                $builder->where('reference', 'like', $term)
-                    ->orWhere('title', 'like', $term)
+                $builder->whereLike('reference', $term)
+                    ->orWhereLike('title', $term)
                     ->orWhereHas('property.address', fn ($address) => $address
-                        ->where('normalized', 'like', $term));
+                        ->whereLike('normalized', $term));
             });
         }
         $paginator = $query->orderByDesc('updated_at')->orderByDesc('id')

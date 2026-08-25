@@ -185,7 +185,10 @@ class DataIntegrationsTest extends TestCase
             'outcome' => 'duplicate_review',
         ]);
         $this->assertDatabaseHas('listings', ['agency_id' => $agency->id, 'reference' => 'MLS-100']);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'integration.sync_completed']);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'integration.sync_completed',
+            'request_id' => $sync['id'],
+        ]);
 
         $candidate = DB::table('duplicate_candidates')->first();
         $this->patchJson("/api/v1/integrations/duplicate-candidates/{$candidate->id}", [

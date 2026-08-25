@@ -68,7 +68,7 @@ class SyncProviderConnection implements ShouldQueue
         }
         $request = Request::create('/internal/integration-sync', 'POST');
         $request->setUserResolver(fn () => $user);
-        $request->attributes->set('request_id', 'integration-sync:'.$sync->id);
+        $request->attributes->set('request_id', (string) $sync->id);
         $request->headers->set('Agency-ID', $this->agencyId);
         $tenant->activate($membership);
         try {
