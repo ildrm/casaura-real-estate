@@ -54,7 +54,7 @@ jobs:
             NEXT_PUBLIC_OPERATOR_ADDRESS=${{ vars.PRODUCTION_OPERATOR_ADDRESS }}
             NEXT_PUBLIC_SUPPORT_EMAIL=${{ vars.PRODUCTION_SUPPORT_EMAIL }}
             NEXT_PUBLIC_ENABLE_DEMO_DATA=false
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository }}-${{ matrix.name }}@${{ steps.build.outputs.digest }}
           format: table
