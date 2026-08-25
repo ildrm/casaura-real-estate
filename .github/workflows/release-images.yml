@@ -61,7 +61,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           severity: CRITICAL,HIGH
-      - uses: sigstore/cosign-installer@v3.9.2
+      - uses: sigstore/cosign-installer@v4.1.2
       - run: cosign sign --yes ghcr.io/${{ github.repository }}-${{ matrix.name }}@${{ steps.build.outputs.digest }}
       - uses: actions/attest-build-provenance@v2
         with:
