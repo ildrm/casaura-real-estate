@@ -1,6 +1,6 @@
 FROM composer:2.10.2@sha256:4d71c3c2109c61d5415544264b59ad4087e4c5b7244481723664138fd36d5040 AS composer
 
-FROM php:8.5.8-fpm-alpine3.23@sha256:37554e891a1b1025c081cbd8bf28e3df38a11af807180f5e8c27315ef8aa9424 AS build
+FROM php:8.5.11-fpm-alpine3.23@sha256:6d75e69d93c446f9f245e81cd0d330c0db9fee45de9cee95facff0826b21378f AS build
 
 ARG PHPREDIS_VERSION=6.3.0
 ARG PHPREDIS_SHA256=cb8f81df1a275599e4f8ddcfec7e1f65ed1953e6f5673649149fd680ebff4cad
@@ -43,7 +43,7 @@ RUN composer dump-autoload --classmap-authoritative --no-dev --no-interaction --
         storage/logs \
     && chown -R www-data:www-data storage bootstrap/cache
 
-FROM php:8.5.8-fpm-alpine3.23@sha256:37554e891a1b1025c081cbd8bf28e3df38a11af807180f5e8c27315ef8aa9424 AS runtime
+FROM php:8.5.11-fpm-alpine3.23@sha256:6d75e69d93c446f9f245e81cd0d330c0db9fee45de9cee95facff0826b21378f AS runtime
 
 RUN apk add --no-cache \
         freetype \
